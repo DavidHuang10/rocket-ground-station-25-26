@@ -1,0 +1,168 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #0a0a0a;
+    color: #ffffff;
+    line-height: 1.6;
+}
+
+header {
+    background-color: #1a1a1a;
+    padding: 20px;
+    border-bottom: 2px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+h2 {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 15px;
+    color: #aaa;
+}
+
+.connection-status {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.connection-status.connected {
+    background-color: #1b5e20;
+    border: 1px solid #4caf50;
+}
+
+.connection-status.disconnected {
+    background-color: #5c1010;
+    border: 1px solid #f44336;
+}
+
+.controls {
+    background-color: #1a1a1a;
+    padding: 15px 20px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.controls label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.controls input {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    width: 100px;
+}
+
+.controls button {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.controls button:hover {
+    background-color: #1976d2;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+
+.panel {
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.chart-panel {
+    min-height: 300px;
+}
+
+.chart-panel canvas {
+    max-height: 250px;
+}
+
+.current-value {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 10px;
+    color: #4caf50;
+}
+
+.large-value {
+    font-size: 48px;
+    font-weight: 700;
+    text-align: center;
+    color: #2196f3;
+}
+
+.stage-indicator {
+    text-align: center;
+}
+
+.stage-value {
+    font-size: 72px;
+    font-weight: 700;
+    color: #ff9800;
+}
+
+.stage-name {
+    font-size: 24px;
+    color: #aaa;
+    margin-top: 10px;
+}
+
+.gps-data, .env-data, .servo-data {
+    font-size: 18px;
+    line-height: 2;
+}
+
+.continuity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.continuity-indicator {
+    padding: 15px;
+    text-align: center;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.continuity-indicator.good {
+    background-color: #1b5e20;
+    border: 2px solid #4caf50;
+}
+
+.continuity-indicator.bad {
+    background-color: #5c1010;
+    border: 2px solid #f44336;
+}

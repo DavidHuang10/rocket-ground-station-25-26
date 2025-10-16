@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERIS Ground Station - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>ERIS Delta Ground Station</h1>
+            <div class="connection-status" :class="connectionStatus">
+                {{ connectionText }}
+            </div>
+        </header>
+
+        <div class="controls">
+            <label>
+                WebSocket Port:
+                <input type="number" v-model="port" min="1" max="65535">
+            </label>
+            <button @click="reconnect">Reconnect</button>
+        </div>
+
+        <div class="dashboard" v-if="config">
+            <!-- Dynamically render panels based on config -->
+            <template v-for="panel in sortedPanels" :key="panel.id">
+
+                <!-- Indicator (e.g., Flight Stage) -->
+                <div v-if="panel.type === 'indicator'" class="panel">
+                    <h2>{{ panel.title }}</h2>
+                    <div class="stage-indicator">
+                        <div class="stage-value">{{ getCurrentValue(panel.fields[0]) }}</div>
+                        <div class="stage-name">{{ getStageName(getCurrentValue(panel.fields[0])) }}</div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div v-else-if="panel.type === 'chart'" class="panel chart-panel">
+                    <h2>{{ panel.title }}</h2>
+                    <canvas :id="`chart-${panel.id}`"></canvas>
+                    <div class="current-value">{{ formatValue(getCurrentValue(panel.fields[0]), panel.precision) }} {{ panel.unit }}</div>
+                </div>
+
+                <!-- Boolean Grid (e.g., Continuity) -->
+                <div v-else-if="panel.type === 'boolean_grid'" class="panel">
+                    <h2>{{ panel.title }}</h2>
+                    <div class="continuity-grid">
+                        <div v-for="item in panel.items" :key="item.field"
+                             :class="['continuity-indicator', getContinuityClass(item.field)]">
+                            {{ item.label }}
+                        </div>
+                    </div>
+                </div>
+
+            </template>
+        </div>
+
+        <!-- Loading state -->
+        <div v-else class="dashboard">
+            <div class="panel">
+                <h2>Loading Configuration...</h2>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,342 @@
+{
+  "panels": [
+    {
+      "id": "flight_stage",
+      "type": "indicator",
+      "title": "Flight Stage",
+      "fields": ["stage"],
+      "order": 1,
+      "mapping": ["Standby", "Armed", "Boost", "Coast", "Drogue", "Main", "Landed"]
+    },
+    {
+      "id": "altitude",
+      "type": "chart",
+      "title": "Altitude",
+      "fields": ["altitude"],
+      "unit": "m AGL",
+      "precision": 1,
+      "order": 2,
+      "chart_color": "#4caf50"
+    },
+    {
+      "id": "velocity",
+      "type": "chart",
+      "title": "Velocity",
+      "fields": ["velocity"],
+      "unit": "m/s",
+      "precision": 1,
+      "order": 3,
+      "chart_color": "#2196f3"
+    },
+    {
+      "id": "battery_voltage",
+      "type": "chart",
+      "title": "Battery Voltage",
+      "fields": ["battery_voltage"],
+      "unit": "V",
+      "precision": 2,
+      "order": 4,
+      "chart_color": "#ff9800"
+    },
+    {
+      "id": "lat",
+      "type": "chart",
+      "title": "GPS Latitude",
+      "fields": ["lat"],
+      "unit": "°",
+      "precision": 7,
+      "order": 5,
+      "chart_color": "#9c27b0"
+    },
+    {
+      "id": "long",
+      "type": "chart",
+      "title": "GPS Longitude",
+      "fields": ["long"],
+      "unit": "°",
+      "precision": 7,
+      "order": 6,
+      "chart_color": "#e91e63"
+    },
+    {
+      "id": "gps_alt",
+      "type": "chart",
+      "title": "GPS Altitude",
+      "fields": ["gps_alt"],
+      "unit": "m",
+      "precision": 1,
+      "order": 7,
+      "chart_color": "#00bcd4"
+    },
+    {
+      "id": "accelx",
+      "type": "chart",
+      "title": "Acceleration X",
+      "fields": ["accelx"],
+      "unit": "m/s²",
+      "precision": 2,
+      "order": 8,
+      "chart_color": "#f44336"
+    },
+    {
+      "id": "accely",
+      "type": "chart",
+      "title": "Acceleration Y",
+      "fields": ["accely"],
+      "unit": "m/s²",
+      "precision": 2,
+      "order": 9,
+      "chart_color": "#4caf50"
+    },
+    {
+      "id": "accelz",
+      "type": "chart",
+      "title": "Acceleration Z",
+      "fields": ["accelz"],
+      "unit": "m/s²",
+      "precision": 2,
+      "order": 10,
+      "chart_color": "#2196f3"
+    },
+    {
+      "id": "gyrox",
+      "type": "chart",
+      "title": "Gyroscope X",
+      "fields": ["gyrox"],
+      "unit": "rad/s",
+      "precision": 3,
+      "order": 11,
+      "chart_color": "#f44336"
+    },
+    {
+      "id": "gyroy",
+      "type": "chart",
+      "title": "Gyroscope Y",
+      "fields": ["gyroy"],
+      "unit": "rad/s",
+      "precision": 3,
+      "order": 12,
+      "chart_color": "#4caf50"
+    },
+    {
+      "id": "gyroz",
+      "type": "chart",
+      "title": "Gyroscope Z",
+      "fields": ["gyroz"],
+      "unit": "rad/s",
+      "precision": 3,
+      "order": 13,
+      "chart_color": "#2196f3"
+    },
+    {
+      "id": "temp",
+      "type": "chart",
+      "title": "Temperature",
+      "fields": ["temp"],
+      "unit": "°C",
+      "precision": 1,
+      "order": 14,
+      "chart_color": "#ff5722"
+    },
+    {
+      "id": "pressure",
+      "type": "chart",
+      "title": "Pressure",
+      "fields": ["pressure"],
+      "unit": "hPa",
+      "precision": 2,
+      "order": 15,
+      "chart_color": "#607d8b"
+    },
+    {
+      "id": "ab_servo",
+      "type": "chart",
+      "title": "Airbrake Servo",
+      "fields": ["ab_servo"],
+      "unit": "%",
+      "precision": 1,
+      "order": 16,
+      "chart_color": "#3f51b5"
+    },
+    {
+      "id": "cnrd_servo",
+      "type": "chart",
+      "title": "Canard Servo",
+      "fields": ["cnrd_servo"],
+      "unit": "%",
+      "precision": 1,
+      "order": 17,
+      "chart_color": "#8bc34a"
+    },
+    {
+      "id": "pyro_continuity",
+      "type": "boolean_grid",
+      "title": "Pyro Continuity",
+      "order": 18,
+      "items": [
+        {
+          "label": "Drogue 1",
+          "field": "drogue_cont_1"
+        },
+        {
+          "label": "Drogue 2",
+          "field": "drogue_cont_2"
+        },
+        {
+          "label": "Main 1",
+          "field": "main_cont_1"
+        },
+        {
+          "label": "Main 2",
+          "field": "main_cont_2"
+        }
+      ]
+    }
+  ],
+  "field_metadata": {
+    "altitude": {
+      "name": "Altitude",
+      "unit": "m",
+      "precision": 1,
+      "description": "Altitude above ground level"
+    },
+    "velocity": {
+      "name": "Velocity",
+      "unit": "m/s",
+      "precision": 1,
+      "description": "Vertical velocity"
+    },
+    "smooth_vel": {
+      "name": "Smooth Velocity",
+      "unit": "m/s",
+      "precision": 1,
+      "description": "Smoothed vertical velocity"
+    },
+    "battery_voltage": {
+      "name": "Battery Voltage",
+      "unit": "V",
+      "precision": 2,
+      "description": "Main battery voltage"
+    },
+    "accelx": {
+      "name": "Accel X",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration X-axis"
+    },
+    "accely": {
+      "name": "Accel Y",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration Y-axis"
+    },
+    "accelz": {
+      "name": "Accel Z",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration Z-axis"
+    },
+    "gyrox": {
+      "name": "Gyro X",
+      "unit": "rad/s",
+      "precision": 3,
+      "description": "Gyroscope X-axis"
+    },
+    "gyroy": {
+      "name": "Gyro Y",
+      "unit": "rad/s",
+      "precision": 3,
+      "description": "Gyroscope Y-axis"
+    },
+    "gyroz": {
+      "name": "Gyro Z",
+      "unit": "rad/s",
+      "precision": 3,
+      "description": "Gyroscope Z-axis"
+    },
+    "hg_accel": {
+      "name": "High-G Accel",
+      "unit": "m/s²",
+      "precision": 1,
+      "description": "High-G accelerometer"
+    },
+    "temp": {
+      "name": "Temperature",
+      "unit": "°C",
+      "precision": 1,
+      "description": "Ambient temperature"
+    },
+    "pressure": {
+      "name": "Pressure",
+      "unit": "hPa",
+      "precision": 2,
+      "description": "Barometric pressure"
+    },
+    "lat": {
+      "name": "Latitude",
+      "unit": "°",
+      "precision": 7,
+      "description": "GPS latitude"
+    },
+    "long": {
+      "name": "Longitude",
+      "unit": "°",
+      "precision": 7,
+      "description": "GPS longitude"
+    },
+    "gps_alt": {
+      "name": "GPS Altitude",
+      "unit": "m",
+      "precision": 1,
+      "description": "GPS altitude"
+    },
+    "stage": {
+      "name": "Flight Stage",
+      "unit": "",
+      "precision": 0,
+      "description": "Current flight stage"
+    },
+    "ab_servo": {
+      "name": "Airbrake Servo",
+      "unit": "%",
+      "precision": 1,
+      "description": "Airbrake servo position"
+    },
+    "cnrd_servo": {
+      "name": "Canard Servo",
+      "unit": "%",
+      "precision": 1,
+      "description": "Canard servo position"
+    },
+    "drogue_cont_1": {
+      "name": "Drogue Continuity 1",
+      "unit": "",
+      "precision": 0,
+      "description": "Drogue parachute pyro channel 1"
+    },
+    "drogue_cont_2": {
+      "name": "Drogue Continuity 2",
+      "unit": "",
+      "precision": 0,
+      "description": "Drogue parachute pyro channel 2"
+    },
+    "main_cont_1": {
+      "name": "Main Continuity 1",
+      "unit": "",
+      "precision": 0,
+      "description": "Main parachute pyro channel 1"
+    },
+    "main_cont_2": {
+      "name": "Main Continuity 2",
+      "unit": "",
+      "precision": 0,
+      "description": "Main parachute pyro channel 2"
+    },
+    "airbrake_cont": {
+      "name": "Airbrake Continuity",
+      "unit": "",
+      "precision": 0,
+      "description": "Airbrake system continuity"
+    }
+  }
+}
