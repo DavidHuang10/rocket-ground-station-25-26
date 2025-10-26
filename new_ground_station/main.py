@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ERIS Ground Station",
-    description="Real-time telemetry receiver and dashboard for ERIS Delta rocket",
+    description="Real-time telemetry receiver and dashboard for ERIS Gamma",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -141,7 +141,7 @@ async def broadcast_telemetry():
             logger.error(f"Error in broadcast loop: {e}")
             # Continue running even if there's an error
 
-
+#for testing
 @app.post("/telemetry/inject")
 async def inject_telemetry(csv_data: str):
     """
