@@ -6,7 +6,7 @@
       "title": "Flight Stage",
       "fields": ["stage"],
       "order": 1,
-      "mapping": ["Standby", "Armed", "Boost", "Coast", "Drogue", "Main", "Landed"]
+      "mapping": ["Idle", "Takeoff", "Burn", "Coast", "Apogee", "Main Parachute", "Landed"]
     },
     {
       "id": "altitude",
