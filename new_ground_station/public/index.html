@@ -29,12 +29,20 @@
             <!-- Dynamically render panels based on config -->
             <template v-for="panel in sortedPanels" :key="panel.id">
 
-                <!-- Indicator (e.g., Flight Stage) -->
-                <div v-if="panel.type === 'indicator'" class="panel">
+                <!-- Timer -->
+                <div v-if="panel.type === 'timer'" class="panel">
                     <h2>{{ panel.title }}</h2>
                     <div class="stage-indicator">
-                        <div class="stage-value">{{ getCurrentValue(panel.fields[0]) }}</div>
-                        <div class="stage-name">{{ getStageName(getCurrentValue(panel.fields[0])) }}</div>
+                        <div class="stage-value">{{ formatTimer(getCurrentValue(panel.fields[0])) }}</div>
+                    </div>
+                </div>
+
+                <!-- Indicator (e.g., Flight Stage) -->
+                <div v-else-if="panel.type === 'indicator'" class="panel">
+                    <h2>{{ panel.title }}</h2>
+                    <div class="stage-indicator">
+                        <div class="stage-value">{{ formatValue(getCurrentValue(panel.fields[0]), panel.precision) }}</div>
+                        <div v-if="panel.mapping" class="stage-name">{{ getStageName(getCurrentValue(panel.fields[0])) }}</div>
                     </div>
                 </div>
 

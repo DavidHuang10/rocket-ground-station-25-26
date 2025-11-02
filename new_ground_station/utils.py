@@ -29,6 +29,7 @@ def format_for_frontend(telemetry: TelemetryData) -> list:
     time = telemetry.cur_time / 1000.0  # Convert ms to seconds
 
     return [
+        {"time": time, "source": "cur_time", "value": telemetry.cur_time},
         {"time": time, "source": "altitude", "value": telemetry.altitude},
         {"time": time, "source": "velocity", "value": telemetry.velocity},
         {"time": time, "source": "smooth_vel", "value": telemetry.smooth_vel},
@@ -53,6 +54,10 @@ def format_for_frontend(telemetry: TelemetryData) -> list:
         {"time": time, "source": "main_cont_1", "value": int(telemetry.main_pyro_cont_1)},
         {"time": time, "source": "main_cont_2", "value": int(telemetry.main_pyro_cont_2)},
         {"time": time, "source": "airbrake_cont", "value": int(telemetry.airbrake_cont)},
+        {"time": time, "source": "launchsite_msl", "value": telemetry.launchsite_msl},
+        {"time": time, "source": "flight_index", "value": telemetry.flight_index},
+        {"time": time, "source": "ellipse_on", "value": int(telemetry.ellipse_on)},
+        {"time": time, "source": "cameras_on", "value": int(telemetry.cameras_on)},
     ]
 
 

@@ -1,11 +1,18 @@
 {
   "panels": [
     {
+      "id": "mission_timer",
+      "type": "timer",
+      "title": "Mission Elapsed Time",
+      "fields": ["cur_time"],
+      "order": 1
+    },
+    {
       "id": "flight_stage",
       "type": "indicator",
       "title": "Flight Stage",
       "fields": ["stage"],
-      "order": 1,
+      "order": 2,
       "mapping": ["Idle", "Takeoff", "Burn", "Coast", "Apogee", "Main Parachute", "Landed"]
     },
     {
@@ -15,7 +22,7 @@
       "fields": ["altitude"],
       "unit": "m AGL",
       "precision": 1,
-      "order": 2,
+      "order": 3,
       "chart_color": "#4caf50"
     },
     {
@@ -25,8 +32,18 @@
       "fields": ["velocity"],
       "unit": "m/s",
       "precision": 1,
-      "order": 3,
+      "order": 4,
       "chart_color": "#2196f3"
+    },
+    {
+      "id": "smooth_velocity",
+      "type": "chart",
+      "title": "Smoothed Velocity",
+      "fields": ["smooth_vel"],
+      "unit": "m/s",
+      "precision": 1,
+      "order": 5,
+      "chart_color": "#03a9f4"
     },
     {
       "id": "battery_voltage",
@@ -35,7 +52,7 @@
       "fields": ["battery_voltage"],
       "unit": "V",
       "precision": 2,
-      "order": 4,
+      "order": 6,
       "chart_color": "#ff9800"
     },
     {
@@ -45,7 +62,7 @@
       "fields": ["lat"],
       "unit": "°",
       "precision": 7,
-      "order": 5,
+      "order": 7,
       "chart_color": "#9c27b0"
     },
     {
@@ -55,7 +72,7 @@
       "fields": ["long"],
       "unit": "°",
       "precision": 7,
-      "order": 6,
+      "order": 8,
       "chart_color": "#e91e63"
     },
     {
@@ -65,7 +82,7 @@
       "fields": ["gps_alt"],
       "unit": "m",
       "precision": 1,
-      "order": 7,
+      "order": 9,
       "chart_color": "#00bcd4"
     },
     {
@@ -75,7 +92,7 @@
       "fields": ["accelx"],
       "unit": "m/s²",
       "precision": 2,
-      "order": 8,
+      "order": 10,
       "chart_color": "#f44336"
     },
     {
@@ -85,7 +102,7 @@
       "fields": ["accely"],
       "unit": "m/s²",
       "precision": 2,
-      "order": 9,
+      "order": 11,
       "chart_color": "#4caf50"
     },
     {
@@ -95,8 +112,18 @@
       "fields": ["accelz"],
       "unit": "m/s²",
       "precision": 2,
-      "order": 10,
+      "order": 12,
       "chart_color": "#2196f3"
+    },
+    {
+      "id": "hg_accel",
+      "type": "chart",
+      "title": "High-G Accelerometer",
+      "fields": ["hg_accel"],
+      "unit": "m/s²",
+      "precision": 1,
+      "order": 13,
+      "chart_color": "#ff5722"
     },
     {
       "id": "gyrox",
@@ -105,7 +132,7 @@
       "fields": ["gyrox"],
       "unit": "rad/s",
       "precision": 3,
-      "order": 11,
+      "order": 14,
       "chart_color": "#f44336"
     },
     {
@@ -115,7 +142,7 @@
       "fields": ["gyroy"],
       "unit": "rad/s",
       "precision": 3,
-      "order": 12,
+      "order": 15,
       "chart_color": "#4caf50"
     },
     {
@@ -125,7 +152,7 @@
       "fields": ["gyroz"],
       "unit": "rad/s",
       "precision": 3,
-      "order": 13,
+      "order": 16,
       "chart_color": "#2196f3"
     },
     {
@@ -135,8 +162,8 @@
       "fields": ["temp"],
       "unit": "°C",
       "precision": 1,
-      "order": 14,
-      "chart_color": "#ff5722"
+      "order": 17,
+      "chart_color": "#673ab7"
     },
     {
       "id": "pressure",
@@ -145,7 +172,7 @@
       "fields": ["pressure"],
       "unit": "hPa",
       "precision": 2,
-      "order": 15,
+      "order": 18,
       "chart_color": "#607d8b"
     },
     {
@@ -155,7 +182,7 @@
       "fields": ["ab_servo"],
       "unit": "%",
       "precision": 1,
-      "order": 16,
+      "order": 19,
       "chart_color": "#3f51b5"
     },
     {
@@ -165,14 +192,31 @@
       "fields": ["cnrd_servo"],
       "unit": "%",
       "precision": 1,
-      "order": 17,
+      "order": 20,
       "chart_color": "#8bc34a"
+    },
+    {
+      "id": "launchsite_msl",
+      "type": "indicator",
+      "title": "Launch Site MSL",
+      "fields": ["launchsite_msl"],
+      "unit": "m",
+      "precision": 1,
+      "order": 21
+    },
+    {
+      "id": "flight_index",
+      "type": "indicator",
+      "title": "Flight Index",
+      "fields": ["flight_index"],
+      "precision": 0,
+      "order": 22
     },
     {
       "id": "pyro_continuity",
       "type": "boolean_grid",
       "title": "Pyro Continuity",
-      "order": 18,
+      "order": 23,
       "items": [
         {
           "label": "Drogue 1",
@@ -191,9 +235,35 @@
           "field": "main_cont_2"
         }
       ]
+    },
+    {
+      "id": "system_status",
+      "type": "boolean_grid",
+      "title": "System Status",
+      "order": 24,
+      "items": [
+        {
+          "label": "Airbrake",
+          "field": "airbrake_cont"
+        },
+        {
+          "label": "Ellipse INS",
+          "field": "ellipse_on"
+        },
+        {
+          "label": "Cameras",
+          "field": "cameras_on"
+        }
+      ]
     }
   ],
   "field_metadata": {
+    "cur_time": {
+      "name": "Mission Elapsed Time",
+      "unit": "ms",
+      "precision": 0,
+      "description": "Milliseconds since boot"
+    },
     "altitude": {
       "name": "Altitude",
       "unit": "m",
@@ -337,6 +407,30 @@
       "unit": "",
       "precision": 0,
       "description": "Airbrake system continuity"
+    },
+    "launchsite_msl": {
+      "name": "Launch Site MSL",
+      "unit": "m",
+      "precision": 1,
+      "description": "Launch site altitude (MSL baseline)"
+    },
+    "flight_index": {
+      "name": "Flight Index",
+      "unit": "",
+      "precision": 0,
+      "description": "Flight plan index for airbrake control"
+    },
+    "ellipse_on": {
+      "name": "Ellipse INS",
+      "unit": "",
+      "precision": 0,
+      "description": "Ellipse INS power status"
+    },
+    "cameras_on": {
+      "name": "Cameras",
+      "unit": "",
+      "precision": 0,
+      "description": "Camera system power status"
     }
   }
 }

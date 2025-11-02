@@ -55,16 +55,40 @@ Refresh browser—new panel appears automatically.
 
 ## Panel Types Reference
 
+### `timer`
+Displays formatted time from milliseconds (converts to MM:SS or HH:MM:SS format).
+```json
+{
+  "id": "mission_timer",
+  "type": "timer",
+  "title": "Mission Elapsed Time",
+  "fields": ["cur_time"],
+  "order": 1
+}
+```
+
 ### `indicator`
-Large value with text mapping (e.g., `0 → "Idle"`).
+Large numeric value with optional text mapping (e.g., `0 → "Idle"`).
 ```json
 {
   "id": "flight_stage",
   "type": "indicator",
   "title": "Flight Stage",
   "fields": ["stage"],
-  "order": 1,
+  "order": 2,
   "mapping": ["Idle", "Takeoff", "Burn", "Coast", "Apogee", "Main Parachute", "Landed"]
+}
+```
+
+For numeric indicators without mapping:
+```json
+{
+  "id": "flight_index",
+  "type": "indicator",
+  "title": "Flight Index",
+  "fields": ["flight_index"],
+  "precision": 0,
+  "order": 22
 }
 ```
 
