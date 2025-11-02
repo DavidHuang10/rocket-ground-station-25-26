@@ -8,8 +8,9 @@ createApp({
             connected: false,
             config: null,
             telemetryData: {},
-            maxDataPoints: 100,
-            heartbeatInterval: null
+            maxDataPoints: null,  // No limit - store all data
+            heartbeatInterval: null,
+            sessionInfo: null
         };
     },
 
@@ -45,6 +46,7 @@ createApp({
         }
 
         await this.loadConfig();
+        await this.loadCurrentSession();
         this.initTelemetryData();
         await this.$nextTick();
         this.initCharts();
@@ -160,13 +162,8 @@ createApp({
                 const { time, source, value } = item;
 
                 if (this.telemetryData.hasOwnProperty(source)) {
-                    // Add data point
+                    // Add data point (no trimming - store all data)
                     this.telemetryData[source].push({ time, value });
-
-                    // Trim to max data points
-                    if (this.telemetryData[source].length > this.maxDataPoints) {
-                        this.telemetryData[source].shift();
-                    }
                 }
             }
 
@@ -306,6 +303,98 @@ createApp({
             const g = parseInt(hex.slice(3, 5), 16);
             const b = parseInt(hex.slice(5, 7), 16);
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        },
+
+        async loadCurrentSession() {
+            try {
+                const response = await fetch(`http://localhost:${this.port}/telemetry/current`);
+                const result = await response.json();
+
+                // Load all existing data from backend
+                result.data.forEach(item => {
+                    const { time, source, value } = item;
+                    if (this.telemetryData.hasOwnProperty(source)) {
+                        this.telemetryData[source].push({ time, value });
+                    }
+                });
+
+                this.sessionInfo = result.session;
+                console.log(`Loaded ${result.data.length} data points from session`);
+            } catch (e) {
+                console.error('Failed to load session:', e);
+            }
+        },
+
+        async clearCharts() {
+            if (!confirm('Clear all chart data?\n\nThis cannot be undone unless you save first.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:${this.port}/telemetry/clear`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Clear frontend data
+                    for (const key in this.telemetryData) {
+                        this.telemetryData[key] = [];
+                    }
+                    this.updateCharts();
+
+                    console.log('✅ Charts cleared');
+                }
+            } catch (e) {
+                alert(`Failed to clear charts: ${e.message}`);
+            }
+        },
+
+        async saveFlight() {
+            try {
+                const response = await fetch(`http://localhost:${this.port}/telemetry/save`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    alert(`Flight saved as ${result.filename}`);
+                    console.log('✅ Flight saved:', result.filename);
+                }
+            } catch (e) {
+                alert(`Failed to save flight: ${e.message}`);
+            }
+        },
+
+        async saveAndClear() {
+            if (!confirm('Save current flight and clear charts?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:${this.port}/telemetry/save-and-clear`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Clear frontend data
+                    for (const key in this.telemetryData) {
+                        this.telemetryData[key] = [];
+                    }
+                    this.updateCharts();
+
+                    alert(`Flight saved as ${result.filename}`);
+                    console.log('✅ Flight saved and cleared:', result.filename);
+                }
+            } catch (e) {
+                alert(`Failed to save and clear: ${e.message}`);
+            }
+        },
+
+        getTotalPackets() {
+            if (!this.sessionInfo) return 0;
+            return this.sessionInfo.packet_count || 0;
         }
     }
 }).mount('#app');

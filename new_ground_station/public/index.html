@@ -25,6 +25,18 @@
             <button @click="reconnect">Reconnect</button>
         </div>
 
+        <div class="session-controls">
+            <div class="session-info">
+                <span class="info-label">Session Active</span>
+                <span class="info-item">{{ getTotalPackets() }} packets</span>
+            </div>
+            <div class="session-actions">
+                <button @click="clearCharts" class="btn-clear">Clear Charts</button>
+                <button @click="saveFlight" class="btn-save">Save Flight</button>
+                <button @click="saveAndClear" class="btn-save-clear">Save & Clear</button>
+            </div>
+        </div>
+
         <div class="dashboard" v-if="config">
             <!-- Dynamically render panels based on config -->
             <template v-for="panel in sortedPanels" :key="panel.id">

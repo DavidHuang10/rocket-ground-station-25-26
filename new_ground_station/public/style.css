@@ -166,3 +166,87 @@ h2 {
     background-color: #5c1010;
     border: 2px solid #f44336;
 }
+
+/* Session Controls */
+.session-controls {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.session-info {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.info-label {
+    font-weight: bold;
+    color: #4caf50;
+}
+
+.info-item {
+    color: #aaa;
+    font-size: 14px;
+}
+
+.session-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-clear {
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-clear:hover {
+    background-color: #f57c00;
+}
+
+.btn-save {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-save:hover {
+    background-color: #1976d2;
+}
+
+.btn-save-clear {
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-save-clear:hover {
+    background-color: #388e3c;
+}
+
+button:active {
+    transform: translateY(1px);
+}

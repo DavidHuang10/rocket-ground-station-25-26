@@ -7,6 +7,7 @@ import logging
 import json
 from models import TelemetryData
 from utils import format_for_frontend, mock_telemetry_producer
+from storage import StorageManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 connected_clients: Set[WebSocket] = set()
 telemetry_queue: asyncio.Queue = asyncio.Queue()
+storage_manager = StorageManager(log_dir="flight_logs")
 
 
 
@@ -114,6 +116,9 @@ async def broadcast_telemetry():
                 telemetry_queue.task_done()
                 continue
 
+            # Save to storage
+            storage_manager.add_telemetry(telemetry)
+
             # Format data for frontend
             message_data = format_for_frontend(telemetry)
             message_json = json.dumps(message_data)
@@ -167,6 +172,36 @@ async def health_check():
         "connected_clients": len(connected_clients),
         "queue_size": telemetry_queue.qsize()
     }
+
+
+@app.get("/telemetry/current")
+async def get_current_telemetry():
+    """Get all telemetry from current session."""
+    return {
+        "data": storage_manager.get_current_data(),
+        "session": storage_manager.get_session_info()
+    }
+
+
+@app.post("/telemetry/clear")
+async def clear_telemetry():
+    """Clear all data (memory and CSV)."""
+    storage_manager.clear_data()
+    return {"status": "success", "message": "Data cleared"}
+
+
+@app.post("/telemetry/save")
+async def save_flight():
+    """Archive current flight to timestamped CSV file."""
+    filename = storage_manager.save_flight()
+    return {"status": "success", "filename": filename}
+
+
+@app.post("/telemetry/save-and-clear")
+async def save_and_clear():
+    """Archive current flight and clear all data."""
+    filename = storage_manager.save_and_clear()
+    return {"status": "success", "filename": filename}
 
 
 # Mount static files last (acts as catch-all for frontend routes)
