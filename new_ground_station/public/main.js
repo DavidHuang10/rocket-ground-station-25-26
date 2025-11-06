@@ -10,7 +10,12 @@ createApp({
             telemetryData: {},
             maxDataPoints: null,  // No limit - store all data
             heartbeatInterval: null,
-            sessionInfo: null
+            sessionInfo: null,
+            // Manual timer
+            manualTimer: 0,
+            manualTimerRunning: false,
+            manualTimerInterval: null,
+            manualTimerEditing: false
         };
     },
 
@@ -395,6 +400,109 @@ createApp({
         getTotalPackets() {
             if (!this.sessionInfo) return 0;
             return this.sessionInfo.packet_count || 0;
+        },
+
+        // Manual timer methods
+        toggleManualTimer() {
+            if (this.manualTimerRunning) {
+                this.pauseManualTimer();
+            } else {
+                this.startManualTimer();
+            }
+        },
+
+        startManualTimer() {
+            if (this.manualTimerInterval) return; // Prevent duplicate intervals
+            this.manualTimerRunning = true;
+            this.manualTimerInterval = setInterval(() => {
+                this.manualTimer += 100;
+            }, 100);
+        },
+
+        pauseManualTimer() {
+            this.manualTimerRunning = false;
+            if (this.manualTimerInterval) {
+                clearInterval(this.manualTimerInterval);
+                this.manualTimerInterval = null;
+            }
+        },
+
+        resetManualTimer() {
+            this.pauseManualTimer();
+            this.manualTimer = 0;
+        },
+
+        editManualTimer() {
+            // Pause timer while editing
+            this.wasRunning = this.manualTimerRunning;
+            if (this.manualTimerRunning) {
+                this.pauseManualTimer();
+            }
+
+            this.manualTimerEditing = true;
+            this.$nextTick(() => {
+                const input = document.getElementById('manual-timer-input');
+                if (input) {
+                    input.value = this.formatTimer(this.manualTimer);
+                    input.focus();
+                    input.select();
+                }
+            });
+        },
+
+        saveManualTimer(event) {
+            const value = event.target.value.trim();
+            const parts = value.split(':').map(p => p.trim());
+
+            // Validate format
+            if (parts.length !== 2 && parts.length !== 3) {
+                alert('Invalid format. Use MM:SS or HH:MM:SS');
+                return;
+            }
+
+            // Parse and validate numbers
+            const numbers = parts.map(p => parseInt(p));
+            if (numbers.some(n => isNaN(n) || n < 0)) {
+                alert('Invalid time values. Use positive numbers only.');
+                return;
+            }
+
+            // Validate ranges
+            if (parts.length === 2) {
+                const [minutes, seconds] = numbers;
+                if (seconds >= 60) {
+                    alert('Seconds must be less than 60');
+                    return;
+                }
+                this.manualTimer = (minutes * 60 + seconds) * 1000;
+            } else if (parts.length === 3) {
+                const [hours, minutes, seconds] = numbers;
+                if (minutes >= 60 || seconds >= 60) {
+                    alert('Minutes and seconds must be less than 60');
+                    return;
+                }
+                this.manualTimer = (hours * 3600 + minutes * 60 + seconds) * 1000;
+            }
+
+            this.manualTimerEditing = false;
+
+            // Resume if it was running
+            if (this.wasRunning) {
+                this.startManualTimer();
+            }
+        },
+
+        cancelEditManualTimer(event) {
+            // Only cancel if not pressing Enter
+            if (event.relatedTarget?.classList.contains('timer-save-btn')) {
+                return;
+            }
+            this.manualTimerEditing = false;
+
+            // Resume if it was running
+            if (this.wasRunning) {
+                this.startManualTimer();
+            }
         }
     }
 }).mount('#app');

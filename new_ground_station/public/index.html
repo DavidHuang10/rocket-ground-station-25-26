@@ -37,6 +37,30 @@
             </div>
         </div>
 
+        <!-- Manual Timer -->
+        <div class="manual-timer-container">
+            <div class="manual-timer">
+                <h2 class="timer-title">Timer</h2>
+                <div class="timer-display" v-if="!manualTimerEditing" @click="editManualTimer">
+                    {{ formatTimer(manualTimer) }}
+                </div>
+                <input
+                    v-else
+                    id="manual-timer-input"
+                    type="text"
+                    class="timer-input"
+                    @keyup.enter="saveManualTimer"
+                    @blur="cancelEditManualTimer"
+                />
+                <div class="timer-controls">
+                    <button @click="toggleManualTimer" :class="['btn-timer', manualTimerRunning ? 'btn-pause' : 'btn-start']">
+                        {{ manualTimerRunning ? 'Pause' : 'Start' }}
+                    </button>
+                    <button @click="resetManualTimer" class="btn-timer btn-reset">Reset</button>
+                </div>
+            </div>
+        </div>
+
         <div class="dashboard" v-if="config">
             <!-- Dynamically render panels based on config -->
             <template v-for="panel in sortedPanels" :key="panel.id">

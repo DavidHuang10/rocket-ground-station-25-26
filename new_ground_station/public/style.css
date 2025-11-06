@@ -250,3 +250,95 @@ h2 {
 button:active {
     transform: translateY(1px);
 }
+
+/* Manual Timer */
+.manual-timer-container {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.manual-timer {
+    background-color: #1a1a1a;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 30px 40px;
+    text-align: center;
+}
+
+.timer-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 15px;
+    color: #aaa;
+}
+
+.timer-display {
+    font-size: 72px;
+    font-weight: 700;
+    color: #ff9800;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+    margin-bottom: 20px;
+}
+
+.timer-display:hover {
+    color: #f57c00;
+}
+
+.timer-input {
+    font-size: 72px;
+    font-weight: 700;
+    color: #ff9800;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #2a2a2a;
+    border: 2px solid #ff9800;
+    border-radius: 8px;
+    padding: 10px 20px;
+    text-align: center;
+    width: 350px;
+    margin-bottom: 20px;
+}
+
+.timer-controls {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.btn-timer {
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+    min-width: 100px;
+}
+
+.btn-start {
+    background-color: #4caf50;
+}
+
+.btn-start:hover {
+    background-color: #388e3c;
+}
+
+.btn-pause {
+    background-color: #ff9800;
+}
+
+.btn-pause:hover {
+    background-color: #f57c00;
+}
+
+.btn-reset {
+    background-color: #f44336;
+}
+
+.btn-reset:hover {
+    background-color: #d32f2f;
+}
