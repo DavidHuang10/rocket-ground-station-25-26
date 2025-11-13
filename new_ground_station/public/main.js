@@ -126,12 +126,22 @@ createApp({
                     return;
                 }
 
-                // Process telemetry data
+                // Process messages
                 try {
-                    const telemetryArray = JSON.parse(data);
-                    this.processTelemetry(telemetryArray);
+                    const message = JSON.parse(data);
+
+                    // Handle clear signal from backend
+                    if (message.type === 'clear') {
+                        this.handleClearSignal(message);
+                        return;
+                    }
+
+                    // Process regular telemetry data (array format)
+                    if (Array.isArray(message)) {
+                        this.processTelemetry(message);
+                    }
                 } catch (e) {
-                    console.error('Failed to parse telemetry:', e);
+                    console.error('Failed to parse message:', e);
                 }
             };
 
@@ -330,8 +340,23 @@ createApp({
             }
         },
 
+        handleClearSignal(message) {
+            // Clear all chart data
+            for (const key in this.telemetryData) {
+                this.telemetryData[key] = [];
+            }
+            this.updateCharts();
+
+            // Log based on clear type
+            if (message.takeoff_offset !== null) {
+                console.log(`🚀 Takeoff! T+0 = ${message.takeoff_time} (offset: ${message.takeoff_offset}s)`);
+            } else {
+                console.log('📊 Charts cleared for new session');
+            }
+        },
+
         async clearCharts() {
-            if (!confirm('Clear all chart data?\n\nThis cannot be undone unless you save first.')) {
+            if (!confirm('Clear charts and mark takeoff?\n\nPre-flight data will be backed up.')) {
                 return;
             }
 
@@ -342,13 +367,10 @@ createApp({
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // Clear frontend data
-                    for (const key in this.telemetryData) {
-                        this.telemetryData[key] = [];
-                    }
-                    this.updateCharts();
-
-                    console.log('✅ Charts cleared');
+                    console.log('✅ Takeoff marked, charts cleared');
+                    // Note: Charts will be cleared via WebSocket broadcast
+                } else if (result.status === 'error') {
+                    alert(result.message);
                 }
             } catch (e) {
                 alert(`Failed to clear charts: ${e.message}`);
@@ -383,14 +405,9 @@ createApp({
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // Clear frontend data
-                    for (const key in this.telemetryData) {
-                        this.telemetryData[key] = [];
-                    }
-                    this.updateCharts();
-
                     alert(`Flight saved as ${result.filename}`);
                     console.log('✅ Flight saved and cleared:', result.filename);
+                    // Note: Charts will be cleared via WebSocket broadcast
                 }
             } catch (e) {
                 alert(`Failed to save and clear: ${e.message}`);
