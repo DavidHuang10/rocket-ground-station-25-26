@@ -1,1 +1,12 @@
-rm -rf flight_logs backups
+#!/bin/bash
+
+echo "This will permanently delete flight_logs/ and backups/"
+read -p "Continue? (y/n): " -n 1 -r
+echo
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    rm -rf flight_logs backups
+    echo "Logs cleared"
+else
+    echo "Cancelled"
+fi
