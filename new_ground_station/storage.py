@@ -188,10 +188,28 @@ class StorageManager:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
 
+        # Create backups directory
+        self.backups_dir = Path(log_dir).parent / "backups"
+        self.backups_dir.mkdir(exist_ok=True)
+
+        # Time tracking for takeoff offset
+        self.takeoff_offset_time: Optional[float] = None  # seconds since boot
+        self.takeoff_wall_time: Optional[datetime] = None  # wall clock time of takeoff
+        self.last_telemetry_time: Optional[float] = None  # seconds since boot (from cur_time)
+
+        # Backup existing current.csv if it exists
+        current_csv = self.log_dir / "current.csv"
+        if current_csv.exists():
+            recovery_timestamp = self._generate_timestamp()
+            recovery_path = self.backups_dir / f"recovery_{recovery_timestamp}.csv"
+            shutil.move(str(current_csv), str(recovery_path))
+            logger.info(f"Backed up existing current.csv to {recovery_path.name}")
+
         # Auto-start session on server boot
         self.current_session = FlightSession(self.log_dir)
 
         logger.info(f"Storage manager initialized: {self.log_dir}")
+        logger.info(f"Backups directory: {self.backups_dir}")
 
     def add_telemetry(self, telemetry: TelemetryData):
         """
@@ -200,6 +218,9 @@ class StorageManager:
         Args:
             telemetry: Validated telemetry data
         """
+        # Track last telemetry time (cur_time is in milliseconds)
+        self.last_telemetry_time = telemetry.cur_time / 1000.0  # Convert to seconds
+
         self.current_session.add_telemetry(telemetry)
 
     def get_current_data(self) -> List[Dict]:
@@ -211,47 +232,124 @@ class StorageManager:
         """
         return self.current_session.get_all_data()
 
-    def clear_data(self):
+    def clear_data(self) -> Dict:
         """
-        Clear all data (memory buffer + CSV file).
-        Charts will reset but session continues.
-        """
-        self.current_session.clear_buffer()
-        self.current_session.reset_csv()
-        logger.info("All data cleared")
-
-    def save_flight(self) -> str:
-        """
-        Archive current.csv to timestamped file.
-        Session continues running.
+        Clear charts and mark takeoff (T+0).
+        Moves current.csv to backups/pre_flight_*.csv (NON-DESTRUCTIVE).
+        Sets takeoff offset for time adjustment.
 
         Returns:
-            Filename of archived flight
+            Dict with status, backup filename, takeoff offset, and takeoff time
         """
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        archive_path = self.log_dir / f"flight_{timestamp}.csv"
+        if self.last_telemetry_time is None:
+            logger.warning("No telemetry received yet, cannot mark takeoff")
+            return {
+                "status": "error",
+                "message": "No telemetry received yet"
+            }
+
+        # Generate timestamp
+        timestamp = self._generate_timestamp()
+
+        # Close current CSV file
+        self.current_session.close()
+
+        # Move current.csv to backups/pre_flight_*.csv (ONLY to backups, NOT flight_logs)
+        src_path = self.log_dir / "current.csv"
+        backup_path = self.backups_dir / f"pre_flight_{timestamp}.csv"
+        self._move_file(src_path, backup_path)
+
+        # Record takeoff offset (use last received telemetry time)
+        self.takeoff_offset_time = self.last_telemetry_time
+        self.takeoff_wall_time = datetime.now()
+
+        # Clear in-memory buffer
+        self.current_session.clear_buffer()
+
+        # Create new session with fresh current.csv
+        self.current_session = FlightSession(self.log_dir)
+
+        logger.info(f"Takeoff marked at T+0 (offset: {self.takeoff_offset_time:.3f}s)")
+
+        return {
+            "status": "success",
+            "backup_filename": backup_path.name,
+            "takeoff_offset": self.takeoff_offset_time,
+            "takeoff_time": self.takeoff_wall_time.isoformat()
+        }
+
+    def save_flight(self) -> Dict:
+        """
+        Archive current.csv to timestamped file (keeps recording).
+        Copies to BOTH backups/ and flight_logs/.
+
+        Returns:
+            Dict with status, filename, and save time
+        """
+        timestamp = self._generate_timestamp()
 
         # Ensure current data is flushed
         self.current_session.csv_file.flush()
 
-        # Copy current.csv to archive
-        shutil.copy(self.current_session.csv_path, archive_path)
+        # Copy to backups (redundant backup)
+        backup_path = self.backups_dir / f"flight_{timestamp}.csv"
+        self._copy_file(self.current_session.csv_path, backup_path)
 
-        logger.info(f"Flight archived: {archive_path.name}")
-        return archive_path.name
+        # Copy to flight_logs (official save)
+        archive_path = self.log_dir / f"flight_{timestamp}.csv"
+        self._copy_file(self.current_session.csv_path, archive_path)
 
-    def save_and_clear(self) -> str:
+        logger.info(f"Flight saved: {archive_path.name}")
+
+        return {
+            "status": "success",
+            "filename": archive_path.name,
+            "saved_at": datetime.now().isoformat()
+        }
+
+    def save_and_clear(self) -> Dict:
         """
         Archive current flight and clear all data.
         This is the "end flight and start new" operation.
+        Resets takeoff offset to None.
 
         Returns:
-            Filename of archived flight
+            Dict with status, filename, and save time
         """
-        filename = self.save_flight()
-        self.clear_data()
-        logger.info(f"Flight saved and cleared: {filename}")
-        return filename
+        timestamp = self._generate_timestamp()
+
+        # Ensure current data is flushed
+        self.current_session.csv_file.flush()
+
+        # Close current session
+        self.current_session.close()
+
+        # Copy to backups (redundant backup)
+        src_path = self.log_dir / "current.csv"
+        backup_path = self.backups_dir / f"flight_{timestamp}.csv"
+        self._copy_file(src_path, backup_path)
+
+        # Move to flight_logs (official save and remove from active)
+        archive_path = self.log_dir / f"flight_{timestamp}.csv"
+        self._move_file(src_path, archive_path)
+
+        # Reset takeoff offset
+        self.takeoff_offset_time = None
+        self.takeoff_wall_time = None
+
+        # Clear in-memory buffer
+        self.current_session.clear_buffer()
+
+        # Create new session with fresh current.csv
+        self.current_session = FlightSession(self.log_dir)
+
+        logger.info(f"Flight saved and cleared: {archive_path.name}")
+
+        return {
+            "status": "success",
+            "filename": archive_path.name,
+            "saved_at": datetime.now().isoformat()
+        }
 
     def get_session_info(self) -> Dict:
         """
@@ -266,6 +364,37 @@ class StorageManager:
             "packet_count": len(self.current_session.telemetry_buffer),
             "duration_seconds": duration
         }
+
+    def _generate_timestamp(self) -> str:
+        """
+        Generate timestamp string for filenames.
+
+        Returns:
+            Timestamp string in format: YYYY-MM-DD_HH-MM-SS
+        """
+        return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    def _copy_file(self, src: Path, dest: Path):
+        """
+        Copy file from source to destination.
+
+        Args:
+            src: Source file path
+            dest: Destination file path
+        """
+        shutil.copy(str(src), str(dest))
+        logger.info(f"Copied {src.name} -> {dest.name}")
+
+    def _move_file(self, src: Path, dest: Path):
+        """
+        Move file from source to destination.
+
+        Args:
+            src: Source file path
+            dest: Destination file path
+        """
+        shutil.move(str(src), str(dest))
+        logger.info(f"Moved {src.name} -> {dest.name}")
 
     def shutdown(self):
         """Clean shutdown - close CSV file."""

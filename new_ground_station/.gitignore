@@ -21,3 +21,7 @@ dist/
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Flight data
+flight_logs/
+backups/

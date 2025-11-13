@@ -185,23 +185,33 @@ async def get_current_telemetry():
 
 @app.post("/telemetry/clear")
 async def clear_telemetry():
-    """Clear all data (memory and CSV)."""
-    storage_manager.clear_data()
-    return {"status": "success", "message": "Data cleared"}
+    """
+    Clear charts and mark takeoff (T+0).
+    Backs up pre-flight data to backups/pre_flight_*.csv.
+    """
+    result = storage_manager.clear_data()
+    return result
 
 
 @app.post("/telemetry/save")
 async def save_flight():
-    """Archive current flight to timestamped CSV file."""
-    filename = storage_manager.save_flight()
-    return {"status": "success", "filename": filename}
+    """
+    Archive current flight to timestamped CSV file.
+    Copies to both backups/ and flight_logs/.
+    Recording continues.
+    """
+    result = storage_manager.save_flight()
+    return result
 
 
 @app.post("/telemetry/save-and-clear")
 async def save_and_clear():
-    """Archive current flight and clear all data."""
-    filename = storage_manager.save_and_clear()
-    return {"status": "success", "filename": filename}
+    """
+    Archive current flight and clear all data.
+    Resets takeoff offset for new session.
+    """
+    result = storage_manager.save_and_clear()
+    return result
 
 
 # Mount static files last (acts as catch-all for frontend routes)
