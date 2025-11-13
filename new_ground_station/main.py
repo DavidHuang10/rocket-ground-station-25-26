@@ -119,8 +119,8 @@ async def broadcast_telemetry():
             # Save to storage
             storage_manager.add_telemetry(telemetry)
 
-            # Format data for frontend
-            message_data = format_for_frontend(telemetry)
+            # Format data for frontend (with time adjustment if takeoff has occurred)
+            message_data = format_for_frontend(telemetry, storage_manager.takeoff_offset_time)
             message_json = json.dumps(message_data)
 
             # Broadcast to all connected clients

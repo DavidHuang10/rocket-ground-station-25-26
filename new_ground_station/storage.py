@@ -54,9 +54,12 @@ class FlightSession:
         self._append_csv_row(telemetry)
         self.csv_file.flush()  # Ensure data is written to disk
 
-    def get_all_data(self) -> List[Dict]:
+    def get_all_data(self, takeoff_offset: Optional[float] = None) -> List[Dict]:
         """
         Return all telemetry data formatted for frontend.
+
+        Args:
+            takeoff_offset: Optional offset in seconds for time adjustment
 
         Returns:
             List of dicts with {time, source, value} format
@@ -65,7 +68,7 @@ class FlightSession:
 
         result = []
         for telem in self.telemetry_buffer:
-            result.extend(format_for_frontend(telem))
+            result.extend(format_for_frontend(telem, takeoff_offset))
         return result
 
     def clear_buffer(self):
@@ -225,12 +228,12 @@ class StorageManager:
 
     def get_current_data(self) -> List[Dict]:
         """
-        Get all telemetry data from current session.
+        Get all telemetry data from current session with time adjustment applied.
 
         Returns:
-            List of formatted telemetry data points
+            List of formatted telemetry data points (with adjusted times if takeoff occurred)
         """
-        return self.current_session.get_all_data()
+        return self.current_session.get_all_data(self.takeoff_offset_time)
 
     def clear_data(self) -> Dict:
         """
@@ -353,16 +356,18 @@ class StorageManager:
 
     def get_session_info(self) -> Dict:
         """
-        Get current session metadata.
+        Get current session metadata including takeoff information.
 
         Returns:
-            Dict with session start time, packet count, duration
+            Dict with session start time, packet count, duration, and takeoff info
         """
         duration = (datetime.now() - self.current_session.start_time).total_seconds()
         return {
             "start_time": self.current_session.start_time.isoformat(),
             "packet_count": len(self.current_session.telemetry_buffer),
-            "duration_seconds": duration
+            "duration_seconds": duration,
+            "takeoff_offset": self.takeoff_offset_time,
+            "takeoff_time": self.takeoff_wall_time.isoformat() if self.takeoff_wall_time else None
         }
 
     def _generate_timestamp(self) -> str:

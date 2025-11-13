@@ -19,14 +19,23 @@ logger = logging.getLogger(__name__)
 #     return _config_cache
 
 
-def format_for_frontend(telemetry: TelemetryData) -> list:
+def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float] = None) -> list:
     """
     Transform TelemetryData to frontend format.
 
     Frontend expects: [{time, source, value}, ...]
     where time is in seconds.
+
+    Args:
+        telemetry: Telemetry data to format
+        takeoff_offset: Optional offset in seconds. If provided, time will be adjusted
+                        to flight time (T+0 = takeoff) instead of boot time.
     """
     time = telemetry.cur_time / 1000.0  # Convert ms to seconds
+
+    # Apply takeoff offset if set (convert to flight time)
+    if takeoff_offset is not None:
+        time = time - takeoff_offset
 
     return [
         {"time": time, "source": "cur_time", "value": telemetry.cur_time},
