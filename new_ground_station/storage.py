@@ -76,21 +76,6 @@ class FlightSession:
         self.telemetry_buffer.clear()
         logger.info("Telemetry buffer cleared")
 
-    def reset_csv(self):
-        """
-        Truncate CSV file and restart with headers.
-        Used when clearing charts.
-        """
-        # Close existing file
-        self.csv_file.close()
-
-        # Reopen in write mode (truncates)
-        self.csv_file = open(self.csv_path, 'w', newline='')
-        self.csv_writer = csv.writer(self.csv_file)
-        self._write_csv_header()
-
-        logger.info("CSV file reset")
-
     def _write_csv_header(self):
         """Write CSV header row with all field names."""
         header = [
@@ -266,10 +251,7 @@ class StorageManager:
         self.takeoff_offset_time = self.last_telemetry_time
         self.takeoff_wall_time = datetime.now()
 
-        # Clear in-memory buffer
-        self.current_session.clear_buffer()
-
-        # Create new session with fresh current.csv
+        # Create new session with fresh current.csv (old buffer discarded)
         self.current_session = FlightSession(self.log_dir)
 
         logger.info(f"Takeoff marked at T+0 (offset: {self.takeoff_offset_time:.3f}s)")
@@ -340,10 +322,7 @@ class StorageManager:
         self.takeoff_offset_time = None
         self.takeoff_wall_time = None
 
-        # Clear in-memory buffer
-        self.current_session.clear_buffer()
-
-        # Create new session with fresh current.csv
+        # Create new session with fresh current.csv (old buffer discarded)
         self.current_session = FlightSession(self.log_dir)
 
         logger.info(f"Flight saved and cleared: {archive_path.name}")

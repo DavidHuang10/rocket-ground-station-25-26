@@ -2,21 +2,9 @@
 import asyncio
 import logging
 from models import TelemetryData
-# from config import load_config, TelemetryConfig
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-# # Global config cache
-# _config_cache: Optional[TelemetryConfig] = None
-
-# Wasn't used, config is handled with frontend.
-# def get_config() -> TelemetryConfig:
-#     """Get cached telemetry configuration."""
-#     global _config_cache
-#     if _config_cache is None:
-#         _config_cache = load_config()
-#     return _config_cache
 
 
 def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float] = None) -> list:
