@@ -51,8 +51,8 @@ createApp({
         }
 
         await this.loadConfig();
-        await this.loadCurrentSession();
         this.initTelemetryData();
+        await this.loadCurrentSession();
         await this.$nextTick();
         this.initCharts();
         this.connect();
@@ -101,7 +101,7 @@ createApp({
         },
 
         connect() {
-            const wsUrl = `ws://localhost:${this.port}/ws`;
+            const wsUrl = `ws://${window.location.host}/ws`;
             console.log(`Connecting to ${wsUrl}...`);
 
             this.ws = new WebSocket(wsUrl);
@@ -322,21 +322,37 @@ createApp({
 
         async loadCurrentSession() {
             try {
-                const response = await fetch(`http://localhost:${this.port}/telemetry/current`);
+                console.log('🔄 Loading current session...');
+                const response = await fetch('/telemetry/current');
                 const result = await response.json();
+
+                console.log(`📦 Received ${result.data.length} data points`);
+                console.log('📊 telemetryData fields:', Object.keys(this.telemetryData));
+
+                let loaded = 0;
+                let skipped = 0;
 
                 // Load all existing data from backend
                 result.data.forEach(item => {
                     const { time, source, value } = item;
                     if (this.telemetryData.hasOwnProperty(source)) {
                         this.telemetryData[source].push({ time, value });
+                        loaded++;
+                    } else {
+                        skipped++;
                     }
                 });
 
                 this.sessionInfo = result.session;
-                console.log(`Loaded ${result.data.length} data points from session`);
+                console.log(`✅ Loaded ${loaded} data points (skipped ${skipped} unknown fields)`);
+
+                // Update charts after loading historical data
+                this.$nextTick(() => {
+                    this.updateCharts();
+                    console.log('📈 Charts updated with historical data');
+                });
             } catch (e) {
-                console.error('Failed to load session:', e);
+                console.error('❌ Failed to load session:', e);
             }
         },
 
@@ -361,7 +377,7 @@ createApp({
             }
 
             try {
-                const response = await fetch(`http://localhost:${this.port}/telemetry/clear`, {
+                const response = await fetch('/telemetry/clear', {
                     method: 'POST'
                 });
                 const result = await response.json();
@@ -379,7 +395,7 @@ createApp({
 
         async saveFlight() {
             try {
-                const response = await fetch(`http://localhost:${this.port}/telemetry/save`, {
+                const response = await fetch('/telemetry/save', {
                     method: 'POST'
                 });
                 const result = await response.json();
@@ -399,7 +415,7 @@ createApp({
             }
 
             try {
-                const response = await fetch(`http://localhost:${this.port}/telemetry/save-and-clear`, {
+                const response = await fetch('/telemetry/save-and-clear', {
                     method: 'POST'
                 });
                 const result = await response.json();
