@@ -1,2 +1,1 @@
-# hi im the ground station
-## My background consists of raspberry pi and websocket
+# Please check the other branch for the real ground station
