@@ -94,6 +94,48 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info(f"WebSocket disconnected. Total clients: {len(connected_clients)}")
 
 
+async def broadcast_message(message: str):
+    """
+    Broadcast a message to all connected WebSocket clients.
+
+    Args:
+        message: JSON string to broadcast
+    """
+    if not connected_clients:
+        return
+
+    disconnected = set()
+    for client in connected_clients:
+        try:
+            await client.send_text(message)
+        except Exception as e:
+            logger.warning(f"Failed to send to client: {e}")
+            disconnected.add(client)
+
+    # Remove disconnected clients
+    if disconnected:
+        connected_clients.difference_update(disconnected)
+        logger.info(f"Removed {len(disconnected)} disconnected clients")
+
+
+async def broadcast_clear_signal(takeoff_offset: float = None, takeoff_time: str = None):
+    """
+    Broadcast clear signal to all connected clients.
+
+    Args:
+        takeoff_offset: Takeoff offset in seconds (None if not a takeoff clear)
+        takeoff_time: ISO timestamp of takeoff (None if not a takeoff clear)
+    """
+    message = {
+        "type": "clear",
+        "takeoff_offset": takeoff_offset,
+        "takeoff_time": takeoff_time
+    }
+    message_json = json.dumps(message)
+    await broadcast_message(message_json)
+    logger.info(f"Broadcasted clear signal (offset={takeoff_offset})")
+
+
 async def broadcast_telemetry():
     """
     Background task that consumes telemetry from queue and broadcasts to all clients.
@@ -124,20 +166,7 @@ async def broadcast_telemetry():
             message_json = json.dumps(message_data)
 
             # Broadcast to all connected clients
-            if connected_clients:
-                disconnected = set()
-
-                for client in connected_clients:
-                    try:
-                        await client.send_text(message_json)
-                    except Exception as e:
-                        logger.warning(f"Failed to send to client: {e}")
-                        disconnected.add(client)
-
-                # Remove disconnected clients
-                if disconnected:
-                    connected_clients.difference_update(disconnected)
-                    logger.info(f"Removed {len(disconnected)} disconnected clients")
+            await broadcast_message(message_json)
 
             # Mark task as done
             telemetry_queue.task_done()
@@ -188,8 +217,17 @@ async def clear_telemetry():
     """
     Clear charts and mark takeoff (T+0).
     Backs up pre-flight data to backups/pre_flight_*.csv.
+    Broadcasts clear signal to all connected clients.
     """
     result = storage_manager.clear_data()
+
+    # Broadcast clear signal to all connected clients
+    if result.get("status") == "success":
+        await broadcast_clear_signal(
+            takeoff_offset=result.get("takeoff_offset"),
+            takeoff_time=result.get("takeoff_time")
+        )
+
     return result
 
 
@@ -209,8 +247,17 @@ async def save_and_clear():
     """
     Archive current flight and clear all data.
     Resets takeoff offset for new session.
+    Broadcasts clear signal to all connected clients.
     """
     result = storage_manager.save_and_clear()
+
+    # Broadcast clear signal to all connected clients (with null offset)
+    if result.get("status") == "success":
+        await broadcast_clear_signal(
+            takeoff_offset=None,
+            takeoff_time=None
+        )
+
     return result
 
 
