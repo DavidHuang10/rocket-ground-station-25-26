@@ -376,6 +376,27 @@ button:active {
     border-bottom: 1px solid #333;
 }
 
+.modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.btn-reset-zoom {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.btn-reset-zoom:hover {
+    background-color: #1976d2;
+}
+
 .modal-header h2 {
     margin: 0;
     font-size: 24px;
@@ -407,13 +428,49 @@ button:active {
 .modal-footer {
     padding: 20px 30px;
     border-top: 1px solid #333;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    justify-content: center;
+}
+
+.btn-reset-zoom {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-reset-zoom:hover {
+    background-color: #1976d2;
+}
+
+.btn-reset-zoom:active {
+    transform: translateY(1px);
+}
+
+.zoom-help {
+    color: #888;
+    font-size: 13px;
+    font-style: italic;
 }
 
 .modal-value {
     font-size: 28px;
     font-weight: 600;
     color: #4caf50;
+    text-align: center;
 }
 
 .chart-panel {

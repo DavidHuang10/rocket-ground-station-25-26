@@ -1,3 +1,5 @@
+import { ChartManager } from './js/managers/ChartManager.js';
+
 const { createApp } = Vue;
 
 createApp({
@@ -32,6 +34,8 @@ createApp({
     created() {
         // Store charts outside Vue's reactive system to avoid stack overflow
         this._charts = {};
+        // Initialize ChartManager for modal charts
+        this.chartManager = null;
     },
 
     computed: {
@@ -65,6 +69,10 @@ createApp({
         await this.loadCurrentSession();
         await this.$nextTick();
         this.initCharts();
+        
+        // Initialize ChartManager for modal charts
+        this.chartManager = new ChartManager();
+        
         this.connect();
     },
 
@@ -233,13 +241,11 @@ createApp({
             });
 
             // Update modal chart if open
-            if (this.modalChart.visible && this.modalChart.instance) {
+            if (this.modalChart.visible && this.chartManager?.modalChart) {
                 const panel = this.config.panels.find(p => p.id === this.modalChart.panelId);
                 if (panel) {
                     const field = panel.fields[0];
-                    const data = (this.telemetryData[field] || []).map(d => ({ x: d.time, y: d.value }));
-                    this.modalChart.instance.data.datasets[0].data = data;
-                    this.modalChart.instance.update('none');
+                    this.chartManager.updateModalChart(this.telemetryData, field);
                     this.modalChart.currentValue = this.getCurrentValue(field);
                 }
             }
@@ -573,62 +579,27 @@ createApp({
             this.modalChart.visible = true;
 
             this.$nextTick(() => {
-                const ctx = document.getElementById('modal-chart');
-                if (ctx) {
-                    this.modalChart.instance = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            datasets: [{
-                                label: panel.title,
-                                data: data,
-                                borderColor: panel.chart_color || '#4caf50',
-                                backgroundColor: this.hexToRgba(panel.chart_color || '#4caf50', 0.1),
-                                tension: 0.4,
-                                pointRadius: 2
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            animation: false,
-                            scales: {
-                                x: {
-                                    type: 'linear',
-                                    title: {
-                                        display: true,
-                                        text: 'Time (s)'
-                                    }
-                                },
-                                y: {
-                                    title: {
-                                        display: true,
-                                        text: `${panel.title} (${panel.unit || ''})`
-                                    }
-                                }
-                            },
-                            plugins: {
-                                legend: {
-                                    display: false
-                                }
-                            }
-                        }
-                    });
+                if (this.chartManager) {
+                    this.modalChart.instance = this.chartManager.createModalChart('modal-chart', panel, data);
                 }
             });
 
-            // Add ESC key listener
             document.addEventListener('keydown', this.handleEscKey);
         },
 
-        closeModal() {
-            if (this.modalChart.instance) {
-                this.modalChart.instance.destroy();
-                this.modalChart.instance = null;
+        resetZoom() {
+            if (this.chartManager) {
+                this.chartManager.resetModalZoom();
             }
+        },
+
+        closeModal() {
+            if (this.chartManager) {
+                this.chartManager.destroyModalChart();
+            }
+            this.modalChart.instance = null;
             this.modalChart.visible = false;
             this.modalChart.panelId = null;
-
-            // Remove ESC key listener
             document.removeEventListener('keydown', this.handleEscKey);
         },
 

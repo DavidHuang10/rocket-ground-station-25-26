@@ -6,6 +6,7 @@
     <title>ERIS Ground Station - Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -115,16 +116,23 @@
             <div class="modal-content" @click.stop>
                 <div class="modal-header">
                     <h2>{{ modalChart.title }}</h2>
-                    <button class="modal-close" @click="closeModal">&times;</button>
+                    <div class="modal-controls">
+                        <button class="btn-reset-zoom" @click.stop="resetZoom" title="Reset Zoom">Reset Zoom</button>
+                        <button class="modal-close" @click="closeModal">&times;</button>
+                    </div>
                 </div>
                 <canvas id="modal-chart"></canvas>
                 <div class="modal-footer">
+                    <div class="modal-controls">
+                        <button @click="resetZoom" class="btn-reset-zoom">Reset Zoom</button>
+                        <span class="zoom-help">Drag to zoom | Scroll wheel to zoom | Ctrl+Drag to pan</span>
+                    </div>
                     <span class="modal-value">{{ formatValue(modalChart.currentValue, modalChart.precision) }} {{ modalChart.unit }}</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>
