@@ -15,6 +15,7 @@ createApp({
             connected: false,
             config: null,
             telemetryData: {},
+            firstDataReceived: false,
             // Manual timer
             manualTimer: 0,
             manualTimerRunning: false,
@@ -101,6 +102,15 @@ createApp({
                 this.dataManager.processTelemetry(message);
                 this.chartManager.update(this.configManager.panels, this.telemetryData);
                 this.updateModalChart();
+
+                // On first data received after late join, re-init charts to ensure they render
+                if (!this.firstDataReceived) {
+                    this.firstDataReceived = true;
+                    this.$nextTick(() => {
+                        this.chartManager.init(this.configManager.panels);
+                        this.chartManager.update(this.configManager.panels, this.telemetryData);
+                    });
+                }
             }
         },
 

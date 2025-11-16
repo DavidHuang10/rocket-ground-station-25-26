@@ -211,7 +211,7 @@ export class ChartManager {
             callbacks: {
                 title: (items) => {
                     if (items.length > 0) {
-                        return `Time: ${items[0].parsed.x.toFixed(3)}s`;
+                        return `Time: ${items[0].parsed.x.toFixed(1)}s`;
                     }
                     return '';
                 },
@@ -219,10 +219,6 @@ export class ChartManager {
                     const value = item.parsed.y;
                     const precision = panel.precision !== undefined ? panel.precision : 2;
                     return `${panel.title}: ${value.toFixed(precision)} ${panel.unit || ''}`;
-                },
-                afterLabel: (item) => {
-                    const precision = panel.precision !== undefined ? panel.precision : 2;
-                    return `Coordinates: (${item.parsed.x.toFixed(3)}, ${item.parsed.y.toFixed(precision)})`;
                 }
             }
         };
