@@ -6,6 +6,7 @@
     <title>ERIS Ground Station - Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -112,8 +113,8 @@
         </div>
 
         <!-- Chart Modal -->
-        <div v-if="modalChart.visible" class="chart-modal" @click="closeModal">
-            <div class="modal-content" @click.stop>
+        <div v-if="modalChart.visible" class="chart-modal" @mousedown.self="closeModal">
+            <div class="modal-content">
                 <div class="modal-header">
                     <h2>{{ modalChart.title }}</h2>
                     <div class="modal-controls">
