@@ -83,7 +83,7 @@
                 </div>
 
                 <!-- Chart -->
-                <div v-else-if="panel.type === 'chart'" class="panel chart-panel">
+                <div v-else-if="panel.type === 'chart'" class="panel chart-panel" @click="openModal(panel)">
                     <h2>{{ panel.title }}</h2>
                     <canvas :id="`chart-${panel.id}`"></canvas>
                     <div class="current-value">{{ formatValue(getCurrentValue(panel.fields[0]), panel.precision) }} {{ panel.unit }}</div>
@@ -107,6 +107,20 @@
         <div v-else class="dashboard">
             <div class="panel">
                 <h2>Loading Configuration...</h2>
+            </div>
+        </div>
+
+        <!-- Chart Modal -->
+        <div v-if="modalChart.visible" class="chart-modal" @click="closeModal">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h2>{{ modalChart.title }}</h2>
+                    <button class="modal-close" @click="closeModal">&times;</button>
+                </div>
+                <canvas id="modal-chart"></canvas>
+                <div class="modal-footer">
+                    <span class="modal-value">{{ formatValue(modalChart.currentValue, modalChart.precision) }} {{ modalChart.unit }}</span>
+                </div>
             </div>
         </div>
     </div>

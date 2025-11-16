@@ -1,42 +1,28 @@
 # Dashboard Configuration
 
-## Why config.json?
-
-Defines what telemetry fields are displayed and how. Change the dashboard layout without modifying code—just edit JSON and refresh the browser.
-
 ## Adding a New Telemetry Field
 
-Example: Adding `engine_temp` to the broadcast and dashboard.
+**Example:** Adding `engine_temp` (already in CSV from flight computer)
 
-### 1. Update CSV parsing in [models.py](models.py)
-Add the field to `TelemetryData`:
+### 1. Backend: Parse CSV field
+**[models.py](models.py)** - Add to `TelemetryData` class:
 ```python
 engine_temp: float = Field(..., description="Engine temperature (°C)")
 ```
 
-Update `from_csv()` to parse it from the CSV string (adjust field index):
+Update `from_csv()` to parse it (adjust index):
 ```python
 engine_temp=float(fields[29]),
 ```
 
-### 2. Add to backend broadcast in [utils.py](utils.py)
-Add to the list in `format_for_frontend()`:
+### 2. Backend: Broadcast to frontend
+**[utils.py](utils.py)** - Add to `format_for_frontend()`:
 ```python
 {"time": time, "source": "engine_temp", "value": telemetry.engine_temp},
 ```
 
-### 3. Add to frontend config in [public/config.json](public/config.json)
-Add field metadata:
-```json
-"engine_temp": {
-  "name": "Engine Temperature",
-  "unit": "°C",
-  "precision": 1,
-  "description": "Engine combustion chamber temperature"
-}
-```
-
-Add a panel to display it:
+### 3. Frontend: Add panel
+**[public/config.json](public/config.json)** - Add to `panels` array:
 ```json
 {
   "id": "engine_temp",
@@ -50,8 +36,18 @@ Add a panel to display it:
 }
 ```
 
+Add to `field_metadata` object:
+```json
+"engine_temp": {
+  "name": "Engine Temperature",
+  "unit": "°C",
+  "precision": 1,
+  "description": "Engine combustion chamber temperature"
+}
+```
+
 ### 4. Done
-Refresh browser—new panel appears automatically.
+Hard refresh browser (Cmd+Shift+R) - new panel appears.
 
 ## Panel Types Reference
 
