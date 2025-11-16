@@ -12,6 +12,7 @@ createApp({
             telemetryData: {},
             heartbeatInterval: null,
             sessionInfo: null,
+            packetCount: 0,
             // Manual timer
             manualTimer: 0,
             manualTimerRunning: false,
@@ -198,6 +199,9 @@ createApp({
 
         processTelemetry(telemetryArray) {
             // telemetryArray format: [{time, source, value}, ...]
+            // Each array represents one telemetry packet
+            this.packetCount++;
+            
             for (const item of telemetryArray) {
                 const { time, source, value } = item;
 
@@ -379,6 +383,8 @@ createApp({
                 });
 
                 this.sessionInfo = result.session;
+                // Initialize packet count from session info
+                this.packetCount = result.session?.packet_count || 0;
                 console.log(`✅ Loaded ${loaded} data points (skipped ${skipped} unknown fields)`);
 
                 // Update charts after loading historical data
@@ -396,6 +402,8 @@ createApp({
             for (const key in this.telemetryData) {
                 this.telemetryData[key] = [];
             }
+            // Reset packet count on clear
+            this.packetCount = 0;
             this.updateCharts();
 
             // Log based on clear type
@@ -466,8 +474,7 @@ createApp({
         },
 
         getTotalPackets() {
-            if (!this.sessionInfo) return 0;
-            return this.sessionInfo.packet_count || 0;
+            return this.packetCount;
         },
 
         // Manual timer methods

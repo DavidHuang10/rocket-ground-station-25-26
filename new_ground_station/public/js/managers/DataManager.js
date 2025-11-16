@@ -4,6 +4,7 @@ export class DataManager {
     constructor() {
         this.telemetryData = {};
         this.sessionInfo = null;
+        this.packetCount = 0;
     }
 
     init(fields) {
@@ -13,6 +14,9 @@ export class DataManager {
     }
 
     processTelemetry(telemetryArray) {
+        // Each array represents one telemetry packet
+        this.packetCount++;
+        
         for (const item of telemetryArray) {
             const { time, source, value } = item;
             if (this.telemetryData.hasOwnProperty(source)) {
@@ -38,6 +42,8 @@ export class DataManager {
             });
 
             this.sessionInfo = result.session;
+            // Initialize packet count from session info
+            this.packetCount = result.session?.packet_count || 0;
             if (loaded > 0) {
                 console.log(`Loaded ${loaded} data points`);
             }
@@ -53,6 +59,8 @@ export class DataManager {
         for (const key in this.telemetryData) {
             this.telemetryData[key] = [];
         }
+        // Reset packet count on clear
+        this.packetCount = 0;
     }
 
     getCurrentValue(source) {
@@ -74,6 +82,6 @@ export class DataManager {
     }
 
     getPacketCount() {
-        return this.sessionInfo?.packet_count || 0;
+        return this.packetCount;
     }
 }
