@@ -121,12 +121,10 @@
                         <button class="modal-close" @click="closeModal">&times;</button>
                     </div>
                 </div>
-                <canvas id="modal-chart"></canvas>
+                <div class="modal-chart-container">
+                    <canvas id="modal-chart"></canvas>
+                </div>
                 <div class="modal-footer">
-                    <div class="modal-controls">
-                        <button @click="resetZoom" class="btn-reset-zoom">Reset Zoom</button>
-                        <span class="zoom-help">Drag to zoom | Scroll wheel to zoom | Ctrl+Drag to pan</span>
-                    </div>
                     <span class="modal-value">{{ formatValue(modalChart.currentValue, modalChart.precision) }} {{ modalChart.unit }}</span>
                 </div>
             </div>

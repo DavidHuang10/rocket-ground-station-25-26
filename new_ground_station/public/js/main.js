@@ -423,7 +423,8 @@ createApp({
                     zoom: {
                         pan: {
                             enabled: true,
-                            mode: 'xy'
+                            mode: 'xy',
+                            modifierKey: null  // No modifier key required - just drag to pan
                         },
                         zoom: {
                             wheel: {
@@ -432,6 +433,9 @@ createApp({
                             },
                             pinch: {
                                 enabled: true
+                            },
+                            drag: {
+                                enabled: false  // Disable drag-to-zoom box
                             },
                             mode: 'xy'
                         },

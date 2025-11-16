@@ -362,10 +362,13 @@ button:active {
     border: 2px solid #333;
     border-radius: 12px;
     width: 90vw;
-    height: 85vh;
+    max-width: 1400px;
+    height: auto;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    margin: 20px;
 }
 
 .modal-header {
@@ -420,9 +423,17 @@ button:active {
     color: #fff;
 }
 
-.modal-content canvas {
+.modal-chart-container {
     flex: 1;
+    min-height: 0;
     padding: 20px 30px;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-content canvas {
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .modal-footer {
