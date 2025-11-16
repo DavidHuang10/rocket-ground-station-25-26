@@ -15,7 +15,6 @@ createApp({
             connected: false,
             config: null,
             telemetryData: {},
-            firstDataReceived: false,
             // Manual timer
             manualTimer: 0,
             manualTimerRunning: false,
@@ -39,10 +38,7 @@ createApp({
         this.configManager = new ConfigManager();
         this.chartManager = new ChartManager();
         this.dataManager = new DataManager();
-        this.wsManager = new WebSocketManager(
-            this.handleWebSocketMessage.bind(this),
-            this.handleConnectionChange.bind(this)
-        );
+        // WebSocketManager will be initialized in mounted() with historical data callback
     },
 
     computed: {
@@ -77,12 +73,15 @@ createApp({
         this.dataManager.init(this.configManager.getAllFields());
         this.telemetryData = this.dataManager.telemetryData;
 
-        await this.dataManager.loadCurrentSession();
         await this.$nextTick();
-
         this.chartManager.init(this.configManager.panels);
-        this.chartManager.update(this.configManager.panels, this.telemetryData);
 
+        // Pass async callback to load historical data after WebSocket connects
+        this.wsManager = new WebSocketManager(
+            this.handleWebSocketMessage.bind(this),
+            this.handleConnectionChange.bind(this),
+            this.loadHistoricalDataAfterConnection.bind(this)
+        );
         this.wsManager.connect();
     },
 
@@ -102,20 +101,22 @@ createApp({
                 this.dataManager.processTelemetry(message);
                 this.chartManager.update(this.configManager.panels, this.telemetryData);
                 this.updateModalChart();
-
-                // On first data received after late join, re-init charts to ensure they render
-                if (!this.firstDataReceived) {
-                    this.firstDataReceived = true;
-                    this.$nextTick(() => {
-                        this.chartManager.init(this.configManager.panels);
-                        this.chartManager.update(this.configManager.panels, this.telemetryData);
-                    });
-                }
             }
         },
 
         handleConnectionChange(connected) {
             this.connected = connected;
+        },
+
+        async loadHistoricalDataAfterConnection() {
+            // Fetch historical data NOW (includes all data up to this moment)
+            // This ensures no gap between historical and live data
+            try {
+                await this.dataManager.loadCurrentSession();
+                this.chartManager.update(this.configManager.panels, this.telemetryData);
+            } catch (e) {
+                console.error('Failed to load historical data after connection:', e);
+            }
         },
 
         reconnect() {

@@ -10,7 +10,6 @@ createApp({
             connected: false,
             config: null,
             telemetryData: {},
-            maxDataPoints: null,  // No limit - store all data
             heartbeatInterval: null,
             sessionInfo: null,
             // Manual timer
@@ -66,7 +65,6 @@ createApp({
 
         await this.loadConfig();
         this.initTelemetryData();
-        await this.loadCurrentSession();
         await this.$nextTick();
         this.initCharts();
         
@@ -124,9 +122,18 @@ createApp({
 
             this.ws = new WebSocket(wsUrl);
 
-            this.ws.onopen = () => {
+            this.ws.onopen = async () => {
                 console.log('WebSocket connected');
                 this.connected = true;
+
+                // Fetch historical data NOW (includes all data up to this moment)
+                // This ensures no gap between historical and live data
+                try {
+                    await this.loadCurrentSession();
+                    this.updateCharts();
+                } catch (e) {
+                    console.error('Failed to load historical data after connection:', e);
+                }
 
                 // Start heartbeat
                 this.heartbeatInterval = setInterval(() => {

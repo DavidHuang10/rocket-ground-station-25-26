@@ -1,12 +1,13 @@
 // WebSocket connection management
 
 export class WebSocketManager {
-    constructor(onMessage, onConnectionChange) {
+    constructor(onMessage, onConnectionChange, onConnected = null) {
         this.ws = null;
         this.connected = false;
         this.heartbeatInterval = null;
         this.onMessage = onMessage;
         this.onConnectionChange = onConnectionChange;
+        this.onConnected = onConnected;
     }
 
     connect() {
@@ -15,10 +16,18 @@ export class WebSocketManager {
 
         this.ws = new WebSocket(wsUrl);
 
-        this.ws.onopen = () => {
+        this.ws.onopen = async () => {
             console.log('WebSocket connected');
             this.connected = true;
             this.onConnectionChange(true);
+
+            if (this.onConnected) {
+                try {
+                    await this.onConnected();
+                } catch (e) {
+                    console.error('Error in onConnected callback:', e);
+                }
+            }
 
             // Start heartbeat
             this.heartbeatInterval = setInterval(() => {
