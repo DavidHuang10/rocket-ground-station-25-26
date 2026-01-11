@@ -5,7 +5,7 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
-            port: 8000,
+
             ws: null,
             connected: false,
             config: null,
@@ -58,11 +58,7 @@ createApp({
     },
 
     async mounted() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlPort = urlParams.get('port');
-        if (urlPort) {
-            this.port = parseInt(urlPort);
-        }
+
 
         await this.loadConfig();
         this.initTelemetryData();
