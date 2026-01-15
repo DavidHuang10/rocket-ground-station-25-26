@@ -1,6 +1,7 @@
 """Utility functions for the ground station."""
 import asyncio
 import logging
+import serial
 from models import TelemetryData
 from typing import Optional
 
@@ -56,6 +57,64 @@ def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float
         {"time": time, "source": "ellipse_on", "value": int(telemetry.ellipse_on)},
         {"time": time, "source": "cameras_on", "value": int(telemetry.cameras_on)},
     ]
+
+
+async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
+    """
+    Read telemetry from serial port (Teensy/LoRa) and put into queue.
+    Includes auto-reconnect logic.
+    """
+    logger.info(f"Starting serial telemetry producer on {port} @ {baudrate}")
+
+    while True:
+        try:
+            # Open serial connection
+            # timeout=1 allows checking for exit/reconnect periodically
+            with serial.Serial(port, baudrate, timeout=1) as ser:
+                logger.info(f"Connected to {port}")
+                
+                # Clear buffers to start fresh
+                ser.reset_input_buffer()
+                
+                while True:
+                    # Initialize vars for checking if data is waiting
+                    try:
+                        # Non-blocking check for data
+                        if ser.in_waiting > 0:
+                            # Read line
+                            line_bytes = ser.readline()
+                            
+                            try:
+                                # Decode
+                                line_str = line_bytes.decode('utf-8', errors='ignore').strip()
+                                
+                                # Skip empty lines
+                                if not line_str:
+                                    continue
+                                    
+                                logger.debug(f"Received serial data: {line_str}")
+                                
+                                # Put in queue
+                                await telemetry_queue.put(line_str)
+                                
+                            except Exception as e:
+                                logger.warning(f"Error processing serial line: {e}")
+                                
+                        else:
+                            # Small sleep to prevent CPU hogging when no data
+                            await asyncio.sleep(0.01)
+                            
+                    except (OSError, serial.SerialException) as e:
+                        logger.error(f"Serial read error: {e}")
+                        break # Break inner loop to trigger reconnect
+                        
+        except (OSError, serial.SerialException) as e:
+            logger.error(f"Failed to connect to {port}: {e}")
+            logger.info("Retrying in 2 seconds...")
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.error(f"Unexpected error in serial producer: {e}")
+            await asyncio.sleep(2)
 
 
 async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):

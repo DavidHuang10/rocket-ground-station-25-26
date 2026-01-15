@@ -5,8 +5,9 @@ import asyncio
 from typing import Set
 import logging
 import json
+import argparse
 from models import TelemetryData
-from utils import format_for_frontend, mock_telemetry_producer
+from utils import format_for_frontend, mock_telemetry_producer, serial_telemetry_producer
 from storage import StorageManager
 
 logging.basicConfig(
@@ -29,7 +30,21 @@ async def lifespan(app: FastAPI):
 
     # Start background tasks
     broadcaster_task = asyncio.create_task(broadcast_telemetry())
-    producer_task = asyncio.create_task(mock_telemetry_producer(telemetry_queue))
+    # Parse CLI arguments (hacky way to get args inside lifespan)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--serial-port", help="Path to serial port (e.g., /dev/ttyACM0)", default=None)
+    # We use parse_known_args because uvicorn adds its own args
+    args, _ = parser.parse_known_args()
+
+    # Start background tasks
+    broadcaster_task = asyncio.create_task(broadcast_telemetry())
+    
+    if args.serial_port:
+        logger.info(f"Starting in REAL mode with serial port: {args.serial_port}")
+        producer_task = asyncio.create_task(serial_telemetry_producer(telemetry_queue, args.serial_port))
+    else:
+        logger.info("Starting in MOCK mode (no --serial-port provided)")
+        producer_task = asyncio.create_task(mock_telemetry_producer(telemetry_queue))
 
     logger.info("Background tasks started")
 
