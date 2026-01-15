@@ -162,12 +162,19 @@ async def broadcast_telemetry():
 
     while True:
         try:
-            # Get telemetry CSV string from queue
-            csv_data = await telemetry_queue.get()
+            # Get telemetry data from queue (can be CSV string or TelemetryData object)
+            data = await telemetry_queue.get()
 
-            # Parse and validate CSV data
+            # Parse data
             try:
-                telemetry = TelemetryData.from_csv(csv_data)
+                if isinstance(data, str):
+                    telemetry = TelemetryData.from_csv(data)
+                elif isinstance(data, TelemetryData):
+                    telemetry = data
+                else:
+                    logger.warning(f"Unknown data type in queue: {type(data)}")
+                    telemetry_queue.task_done()
+                    continue
             except (ValueError, Exception) as e:
                 logger.error(f"Failed to parse telemetry: {e}")
                 telemetry_queue.task_done()
@@ -279,3 +286,7 @@ async def save_and_clear():
 # Mount static files last (acts as catch-all for frontend routes)
 # This serves index.html, dash.html, and all static assets
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -4,6 +4,8 @@ import logging
 import serial
 from models import TelemetryData
 from typing import Optional
+import telemetry_pb2
+
 
 logger = logging.getLogger(__name__)
 
@@ -62,51 +64,63 @@ def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float
 async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
     """
     Read telemetry from serial port (Teensy/LoRa) and put into queue.
-    Includes auto-reconnect logic.
+    Uses generic Protobuf + Length-Prefix framing.
+    Format: [Length Byte] [Protobuf Payload]
     """
-    logger.info(f"Starting serial telemetry producer on {port} @ {baudrate}")
+    logger.info(f"Starting serial TELEMETRY (PROTOBUF) producer on {port} @ {baudrate}")
 
     while True:
         try:
             # Open serial connection
-            # timeout=1 allows checking for exit/reconnect periodically
-            with serial.Serial(port, baudrate, timeout=1) as ser:
+            with serial.Serial(port, baudrate, timeout=0.1) as ser:
                 logger.info(f"Connected to {port}")
-                
-                # Clear buffers to start fresh
                 ser.reset_input_buffer()
                 
                 while True:
-                    # Initialize vars for checking if data is waiting
                     try:
-                        # Non-blocking check for data
-                        if ser.in_waiting > 0:
-                            # Read line
-                            line_bytes = ser.readline()
+                        # 1. Read Length (1 byte) via blocking read with small timeout
+                        # We use a small timeout loop to allow checking for cancellation/other tasks
+                         if ser.in_waiting > 0:
+                            length_byte = ser.read(1)
+                            if not length_byte:
+                                await asyncio.sleep(0.01)
+                                continue
+                                
+                            length = length_byte[0] # Convert byte to int
                             
+                            # 2. Read Payload (N bytes)
+                            # Loop until we get the full payload
+                            payload = b""
+                            while len(payload) < length:
+                                remaining = length - len(payload)
+                                chunk = ser.read(remaining)
+                                if chunk:
+                                    payload += chunk
+                                else:
+                                    # Tiny sleep if waiting for bytes
+                                    await asyncio.sleep(0.005)
+                            
+                            # 3. Decode Protobuf
                             try:
-                                # Decode
-                                line_str = line_bytes.decode('utf-8', errors='ignore').strip()
+                                packet = telemetry_pb2.TelemetryPacket()
+                                packet.ParseFromString(payload)
                                 
-                                # Skip empty lines
-                                if not line_str:
-                                    continue
-                                    
-                                logger.debug(f"Received serial data: {line_str}")
+                                # 4. Convert to Model
+                                telemetry = TelemetryData.from_protobuf(packet)
                                 
-                                # Put in queue
-                                await telemetry_queue.put(line_str)
+                                logger.debug(f"Received protobuf packet: time={telemetry.cur_time}")
+                                
+                                # 5. Put in queue
+                                await telemetry_queue.put(telemetry)
                                 
                             except Exception as e:
-                                logger.warning(f"Error processing serial line: {e}")
-                                
-                        else:
-                            # Small sleep to prevent CPU hogging when no data
+                                logger.warning(f"Error decoding protobuf: {e}")
+                         else:
                             await asyncio.sleep(0.01)
-                            
+
                     except (OSError, serial.SerialException) as e:
                         logger.error(f"Serial read error: {e}")
-                        break # Break inner loop to trigger reconnect
+                        break 
                         
         except (OSError, serial.SerialException) as e:
             logger.error(f"Failed to connect to {port}: {e}")
