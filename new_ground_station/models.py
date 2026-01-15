@@ -1,5 +1,8 @@
 from pydantic import BaseModel, Field, field_validator
+
 from typing import Optional
+# Forward declaration for type hinting if needed, but simple import inside method is safer to avoid circular deps if pb2 imports this
+
 
 
 class TelemetryData(BaseModel):
@@ -116,6 +119,47 @@ class TelemetryData(BaseModel):
             )
         except (ValueError, IndexError) as e:
             raise ValueError(f"Failed to parse CSV: {e}") from e
+
+    @classmethod
+    def from_protobuf(cls, packet) -> "TelemetryData":
+        """
+        Create TelemetryData from a Protobuf packet.
+        
+        Args:
+            packet: telemetry_pb2.TelemetryPacket instance
+        """
+        # Map fields 1:1
+        return cls(
+            cur_time=packet.cur_time,
+            gps_lat=packet.gps_lat,
+            gps_lng=packet.gps_lng,
+            gps_alt=packet.gps_alt,
+            accel_x=packet.accel_x,
+            accel_y=packet.accel_y,
+            accel_z=packet.accel_z,
+            gyro_x=packet.gyro_x,
+            gyro_y=packet.gyro_y,
+            gyro_z=packet.gyro_z,
+            hg_accel=packet.hg_accel,
+            altitude=packet.alt_baro,
+            velocity=packet.vel_vertical,
+            smooth_vel=packet.smooth_vel,
+            pressure=packet.press,
+            temperature=packet.temp,
+            launchsite_msl=packet.launchsite_msl,
+            airbrake_cont=packet.airbrake_cont,
+            ab_servo_pct=packet.ab_servo_pct,
+            cnrd_servo_pct=packet.cnrd_servo_pct,
+            drogue_pyro_cont_1=packet.drogue_pyro_cont_1,
+            drogue_pyro_cont_2=packet.drogue_pyro_cont_2,
+            main_pyro_cont_1=packet.main_pyro_cont_1,
+            main_pyro_cont_2=packet.main_pyro_cont_2,
+            flight_index=packet.flight_index,
+            ellipse_on=packet.ellipse_on,
+            cameras_on=packet.cameras_on,
+            battery_voltage=packet.battery_voltage,
+            flight_stage=packet.flight_stage
+        )
 
     def get_gps_lat_degrees(self) -> float:
         """Convert scaled GPS latitude to degrees."""
