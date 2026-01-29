@@ -1,0 +1,19 @@
+[Unit]
+Description=ERIS Ground Station Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=raspy
+Group=raspy
+WorkingDirectory=/home/raspy/ground-station/new_ground_station
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 80
+Restart=always
+RestartSec=5
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
