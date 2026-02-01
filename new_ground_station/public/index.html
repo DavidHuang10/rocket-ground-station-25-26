@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ERIS Ground Station - Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <script src="vendor/vue.global.js"></script>
+    <script src="vendor/chart.min.js"></script>
+    <script src="vendor/hammer.min.js"></script>
+    <script src="vendor/chartjs-plugin-zoom.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,7 +32,6 @@
             <div class="session-actions">
                 <button @click="clearCharts" class="btn-clear">Clear Charts (Takeoff)</button>
                 <button @click="saveFlight" class="btn-save">Save Flight</button>
-                <button @click="saveAndClear" class="btn-save-clear">Save & Clear</button>
             </div>
         </div>
 
