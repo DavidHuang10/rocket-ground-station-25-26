@@ -1,3 +1,11 @@
+/**
+ * ERIS Ground Station Dashboard
+ * 
+ * Vue 3 application for real-time rocket telemetry visualization.
+ * Connects via WebSocket for live data, fetches historical data on load,
+ * and displays telemetry in configurable chart/indicator panels.
+ */
+
 import { ChartManager } from './js/managers/ChartManager.js';
 
 const { createApp } = Vue;
@@ -5,20 +13,29 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
-
+            // Connection state
             ws: null,
             connected: false,
+            heartbeatInterval: null,
+
+            // Data management
             config: null,
             telemetryData: {},
-            heartbeatInterval: null,
             sessionInfo: null,
             packetCount: 0,
-            // Manual timer
+            
+            // Buffering for race condition prevention: messages that arrive
+            // before historical data loads are queued here
+            historicalDataLoaded: false,
+            messageBuffer: [],
+
+            // Manual stopwatch timer (separate from telemetry time)
             manualTimer: 0,
             manualTimerRunning: false,
             manualTimerInterval: null,
             manualTimerEditing: false,
-            // Modal chart
+
+            // Expanded chart modal state
             modalChart: {
                 visible: false,
                 instance: null,
@@ -32,9 +49,9 @@ createApp({
     },
 
     created() {
-        // Store charts outside Vue's reactive system to avoid stack overflow
+        // Charts stored outside Vue reactivity to prevent stack overflow
+        // with Chart.js's complex object structure
         this._charts = {};
-        // Initialize ChartManager for modal charts
         this.chartManager = null;
     },
 
@@ -42,45 +59,39 @@ createApp({
         connectionStatus() {
             return this.connected ? 'connected' : 'disconnected';
         },
-
         connectionText() {
             return this.connected ? 'Connected' : 'Disconnected';
         },
-
         flightStage() {
             const stageData = this.telemetryData.stage;
             return stageData && stageData.length > 0 ? stageData[stageData.length - 1].value : 0;
         },
-
         sortedPanels() {
             return this.config ? [...this.config.panels].sort((a, b) => a.order - b.order) : [];
         }
     },
 
     async mounted() {
-
-
         await this.loadConfig();
         this.initTelemetryData();
         await this.$nextTick();
         this.initCharts();
-        
-        // Initialize ChartManager for modal charts
         this.chartManager = new ChartManager();
-        
         this.connect();
     },
 
     beforeUnmount() {
-        if (this.ws) {
-            this.ws.close();
-        }
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-        }
+        if (this.ws) this.ws.close();
+        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     },
 
     methods: {
+        /*
+         * ============================================
+         * CONFIGURATION & INITIALIZATION
+         * ============================================
+         */
+
         async loadConfig() {
             try {
                 const response = await fetch('/config.json');
@@ -88,79 +99,79 @@ createApp({
                 console.log('Configuration loaded:', this.config);
             } catch (e) {
                 console.error('Failed to load configuration:', e);
-                // Fallback to empty config
                 this.config = { panels: [], field_metadata: {} };
             }
         },
 
         initTelemetryData() {
-            // Build telemetry data structure from all fields in config
+            // Build empty arrays for each field defined in config panels
             const fields = new Set();
-
             this.config.panels.forEach(panel => {
-                if (panel.fields) {
-                    panel.fields.forEach(f => fields.add(f));
-                }
-                if (panel.items) {
-                    panel.items.forEach(item => {
-                        if (item.field) fields.add(item.field);
-                    });
-                }
+                if (panel.fields) panel.fields.forEach(f => fields.add(f));
+                if (panel.items) panel.items.forEach(item => { if (item.field) fields.add(item.field); });
             });
-
-            fields.forEach(field => {
-                this.telemetryData[field] = [];
-            });
+            fields.forEach(field => { this.telemetryData[field] = []; });
         },
+
+        /*
+         * ============================================
+         * WEBSOCKET CONNECTION
+         * 
+         * On connect: fetch historical data FIRST, then process live messages.
+         * Messages arriving during historical load are buffered to prevent
+         * race conditions that cause chart artifacts.
+         * ============================================
+         */
 
         connect() {
             const wsUrl = `ws://${window.location.host}/ws`;
             console.log(`Connecting to ${wsUrl}...`);
-
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = async () => {
                 console.log('WebSocket connected');
                 this.connected = true;
+                this.historicalDataLoaded = false;
+                this.messageBuffer = [];
 
-                // Fetch historical data NOW (includes all data up to this moment)
-                // This ensures no gap between historical and live data
                 try {
                     await this.loadCurrentSession();
+                    this.historicalDataLoaded = true;
+
+                    // Drain buffered messages that arrived during load
+                    if (this.messageBuffer.length > 0) {
+                        console.log(`📬 Processing ${this.messageBuffer.length} buffered messages`);
+                        this.messageBuffer.forEach(msg => this.processTelemetry(msg));
+                        this.messageBuffer = [];
+                    }
                     this.updateCharts();
                 } catch (e) {
-                    console.error('Failed to load historical data after connection:', e);
+                    console.error('Failed to load historical data:', e);
+                    this.historicalDataLoaded = true;
                 }
 
-                // Start heartbeat
                 this.heartbeatInterval = setInterval(() => {
-                    if (this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send('ping');
-                    }
+                    if (this.ws.readyState === WebSocket.OPEN) this.ws.send('ping');
                 }, 5000);
             };
 
             this.ws.onmessage = (event) => {
-                const data = event.data;
+                if (event.data === 'pong') return;
 
-                // Handle pong
-                if (data === 'pong') {
-                    return;
-                }
-
-                // Process messages
                 try {
-                    const message = JSON.parse(data);
+                    const message = JSON.parse(event.data);
 
-                    // Handle clear signal from backend
                     if (message.type === 'clear') {
                         this.handleClearSignal(message);
                         return;
                     }
 
-                    // Process regular telemetry data (array format)
                     if (Array.isArray(message)) {
-                        this.processTelemetry(message);
+                        if (!this.historicalDataLoaded) {
+                            this.messageBuffer.push(message);
+                        } else {
+                            this.processTelemetry(message);
+                        }
                     }
                 } catch (e) {
                     console.error('Failed to parse message:', e);
@@ -170,15 +181,8 @@ createApp({
             this.ws.onclose = () => {
                 console.log('WebSocket disconnected');
                 this.connected = false;
-
-                if (this.heartbeatInterval) {
-                    clearInterval(this.heartbeatInterval);
-                }
-
-                // Auto-reconnect after 1 second
-                setTimeout(() => {
-                    this.connect();
-                }, 1000);
+                if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+                setTimeout(() => this.connect(), 1000);
             };
 
             this.ws.onerror = (error) => {
@@ -187,73 +191,109 @@ createApp({
         },
 
         reconnect() {
-            if (this.ws) {
-                this.ws.close();
-            }
+            if (this.ws) this.ws.close();
             this.connect();
         },
 
-        processTelemetry(telemetryArray) {
-            // telemetryArray format: [{time, source, value}, ...]
-            // Each array represents one telemetry packet
-            this.packetCount++;
-            
-            for (const item of telemetryArray) {
-                const { time, source, value } = item;
+        /*
+         * ============================================
+         * TELEMETRY DATA PROCESSING
+         * ============================================
+         */
 
+        processTelemetry(telemetryArray) {
+            // Each packet is an array of {time, source, value} objects
+            this.packetCount++;
+            for (const { time, source, value } of telemetryArray) {
                 if (this.telemetryData.hasOwnProperty(source)) {
-                    // Add data point (no trimming - store all data)
                     this.telemetryData[source].push({ time, value });
                 }
             }
-
-            // Update charts
             this.updateCharts();
         },
 
+        async loadCurrentSession() {
+            console.log('🔄 Loading current session...');
+            const response = await fetch('/telemetry/current');
+            const result = await response.json();
+
+            let loaded = 0;
+            result.data.forEach(({ time, source, value }) => {
+                if (this.telemetryData.hasOwnProperty(source)) {
+                    this.telemetryData[source].push({ time, value });
+                    loaded++;
+                }
+            });
+
+            this.sessionInfo = result.session;
+            this.packetCount = result.session?.packet_count || 0;
+            console.log(`✅ Loaded ${loaded} data points`);
+
+            this.$nextTick(() => this.updateCharts());
+        },
+
+        handleClearSignal(message) {
+            // Clear all chart data and reset packet count
+            for (const key in this.telemetryData) {
+                this.telemetryData[key] = [];
+            }
+            this.packetCount = 0;
+            this.updateCharts();
+
+            if (message.takeoff_offset !== null) {
+                console.log(`🚀 Takeoff! T+0 = ${message.takeoff_time}`);
+            } else {
+                console.log('📊 Charts cleared for new session');
+            }
+        },
+
+        /*
+         * ============================================
+         * CHART MANAGEMENT
+         * ============================================
+         */
+
         initCharts() {
             this.config.panels.forEach(panel => {
-                if (panel.type === 'chart') {
-                    const canvasId = `chart-${panel.id}`;
-                    const ctx = document.getElementById(canvasId);
-                    if (ctx) {
-                        this._charts[panel.id] = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                datasets: [{
-                                    label: panel.title,
-                                    data: [],
-                                    borderColor: panel.chart_color || '#4caf50',
-                                    backgroundColor: this.hexToRgba(panel.chart_color || '#4caf50', 0.1),
-                                    tension: 0.4,
-                                    pointRadius: 0
-                                }]
-                            },
-                            options: this.getChartOptions(panel)
-                        });
-                    }
-                }
+                if (panel.type !== 'chart') return;
+
+                const ctx = document.getElementById(`chart-${panel.id}`);
+                if (!ctx) return;
+
+                this._charts[panel.id] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: panel.title,
+                            data: [],
+                            borderColor: panel.chart_color || '#4caf50',
+                            backgroundColor: this.hexToRgba(panel.chart_color || '#4caf50', 0.1),
+                            tension: 0.4,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: this.getChartOptions(panel)
+                });
             });
         },
 
         updateCharts() {
             this.config.panels.forEach(panel => {
                 const chart = this._charts[panel.id];
-                if (chart) {
-                    const field = panel.fields[0];
-                    const data = (this.telemetryData[field] || []).map(d => ({ x: d.time, y: d.value }));
-                    chart.data.datasets[0].data = data;
-                    chart.update('none');
-                }
+                if (!chart) return;
+
+                const field = panel.fields[0];
+                const data = (this.telemetryData[field] || []).map(d => ({ x: d.time, y: d.value }));
+                chart.data.datasets[0].data = data;
+                chart.update('none');
             });
 
-            // Update modal chart if open
+            // Keep modal chart in sync if open
             if (this.modalChart.visible && this.chartManager?.modalChart) {
                 const panel = this.config.panels.find(p => p.id === this.modalChart.panelId);
                 if (panel) {
-                    const field = panel.fields[0];
-                    this.chartManager.updateModalChart(this.telemetryData, field);
-                    this.modalChart.currentValue = this.getCurrentValue(field);
+                    this.chartManager.updateModalChart(this.telemetryData, panel.fields[0]);
+                    this.modalChart.currentValue = this.getCurrentValue(panel.fields[0]);
                 }
             }
         },
@@ -266,84 +306,92 @@ createApp({
                 scales: {
                     x: {
                         type: 'linear',
-                        title: {
-                            display: true,
-                            text: 'Time (s)'
-                        },
-                        ticks: {
-                            autoSkip: true,
-                            maxTicksLimit: 10
-                        }
+                        title: { display: true, text: 'Time (s)' },
+                        ticks: { autoSkip: true, maxTicksLimit: 10 }
                     },
                     y: {
-                        title: {
-                            display: true,
-                            text: `${panel.title} (${panel.unit || ''})`
-                        },
-                        ticks: {
-                            autoSkip: true,
-                            maxTicksLimit: 8
-                        }
+                        title: { display: true, text: `${panel.title} (${panel.unit || ''})` },
+                        ticks: { autoSkip: true, maxTicksLimit: 8 }
                     }
                 },
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                }
+                plugins: { legend: { display: false } }
             };
         },
 
+        /*
+         * ============================================
+         * SESSION ACTIONS (SAVE / CLEAR)
+         * ============================================
+         */
+
+        async clearCharts() {
+            if (!confirm('Clear charts and mark takeoff?\n\nPre-flight data will be backed up.')) return;
+
+            try {
+                const response = await fetch('/telemetry/clear', { method: 'POST' });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    console.log('✅ Takeoff marked, charts cleared');
+                } else if (result.status === 'error') {
+                    alert(result.message);
+                }
+            } catch (e) {
+                alert(`Failed to clear charts: ${e.message}`);
+            }
+        },
+
+        async saveFlight() {
+            try {
+                const response = await fetch('/telemetry/save', { method: 'POST' });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    alert(`Flight saved as ${result.filename}`);
+                    console.log('✅ Flight saved:', result.filename);
+                }
+            } catch (e) {
+                alert(`Failed to save flight: ${e.message}`);
+            }
+        },
+
+        /*
+         * ============================================
+         * UTILITY METHODS
+         * ============================================
+         */
+
         getCurrentValue(source) {
             const data = this.telemetryData[source];
-            if (data && data.length > 0) {
-                return data[data.length - 1].value;
-            }
-            return 0;
+            return data && data.length > 0 ? data[data.length - 1].value : 0;
         },
 
         formatValue(value, precision) {
             if (value === null || value === undefined) return '0';
-            if (typeof value === 'number') {
-                return value.toFixed(precision || 0);
-            }
-            return value.toString();
+            return typeof value === 'number' ? value.toFixed(precision || 0) : value.toString();
         },
 
-        formatTimer(milliseconds) {
-            if (!milliseconds || milliseconds < 0) return '00:00';
-
-            const totalSeconds = Math.floor(milliseconds / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-
-            if (hours > 0) {
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        formatTimer(ms) {
+            if (!ms || ms < 0) return '00:00';
+            const totalSec = Math.floor(ms / 1000);
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            const pad = n => n.toString().padStart(2, '0');
+            return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
         },
 
         getStageName(stage) {
             const panel = this.config?.panels.find(p => p.id === 'flight_stage');
-            if (panel && panel.mapping) {
-                return panel.mapping[stage] || 'Unknown';
-            }
-            return stage.toString();
+            return panel?.mapping?.[stage] || stage.toString();
         },
 
         getContinuityClass(source) {
-            const value = this.getCurrentValue(source);
-            return value === 1 ? 'good' : 'bad';
+            return this.getCurrentValue(source) === 1 ? 'good' : 'bad';
         },
 
         getCurrentTime() {
-            // Get the most recent time value from any telemetry source
             for (const source in this.telemetryData) {
                 const data = this.telemetryData[source];
-                if (data && data.length > 0) {
-                    return data[data.length - 1].time;
-                }
+                if (data && data.length > 0) return data[data.length - 1].time;
             }
             return 0;
         },
@@ -355,139 +403,27 @@ createApp({
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         },
 
-        async loadCurrentSession() {
-            try {
-                console.log('🔄 Loading current session...');
-                const response = await fetch('/telemetry/current');
-                const result = await response.json();
-
-                console.log(`📦 Received ${result.data.length} data points`);
-                console.log('📊 telemetryData fields:', Object.keys(this.telemetryData));
-
-                let loaded = 0;
-                let skipped = 0;
-
-                // Load all existing data from backend
-                result.data.forEach(item => {
-                    const { time, source, value } = item;
-                    if (this.telemetryData.hasOwnProperty(source)) {
-                        this.telemetryData[source].push({ time, value });
-                        loaded++;
-                    } else {
-                        skipped++;
-                    }
-                });
-
-                this.sessionInfo = result.session;
-                // Initialize packet count from session info
-                this.packetCount = result.session?.packet_count || 0;
-                console.log(`✅ Loaded ${loaded} data points (skipped ${skipped} unknown fields)`);
-
-                // Update charts after loading historical data
-                this.$nextTick(() => {
-                    this.updateCharts();
-                    console.log('📈 Charts updated with historical data');
-                });
-            } catch (e) {
-                console.error('❌ Failed to load session:', e);
-            }
-        },
-
-        handleClearSignal(message) {
-            // Clear all chart data
-            for (const key in this.telemetryData) {
-                this.telemetryData[key] = [];
-            }
-            // Reset packet count on clear
-            this.packetCount = 0;
-            this.updateCharts();
-
-            // Log based on clear type
-            if (message.takeoff_offset !== null) {
-                console.log(`🚀 Takeoff! T+0 = ${message.takeoff_time} (offset: ${message.takeoff_offset}s)`);
-            } else {
-                console.log('📊 Charts cleared for new session');
-            }
-        },
-
-        async clearCharts() {
-            if (!confirm('Clear charts and mark takeoff?\n\nPre-flight data will be backed up.')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/telemetry/clear', {
-                    method: 'POST'
-                });
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    console.log('✅ Takeoff marked, charts cleared');
-                    // Note: Charts will be cleared via WebSocket broadcast
-                } else if (result.status === 'error') {
-                    alert(result.message);
-                }
-            } catch (e) {
-                alert(`Failed to clear charts: ${e.message}`);
-            }
-        },
-
-        async saveFlight() {
-            try {
-                const response = await fetch('/telemetry/save', {
-                    method: 'POST'
-                });
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    alert(`Flight saved as ${result.filename}`);
-                    console.log('✅ Flight saved:', result.filename);
-                }
-            } catch (e) {
-                alert(`Failed to save flight: ${e.message}`);
-            }
-        },
-
-        async saveAndClear() {
-            if (!confirm('Save current flight and clear charts?')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/telemetry/save-and-clear', {
-                    method: 'POST'
-                });
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    alert(`Flight saved as ${result.filename}`);
-                    console.log('✅ Flight saved and cleared:', result.filename);
-                    // Note: Charts will be cleared via WebSocket broadcast
-                }
-            } catch (e) {
-                alert(`Failed to save and clear: ${e.message}`);
-            }
-        },
-
         getTotalPackets() {
             return this.packetCount;
         },
 
-        // Manual timer methods
+        /*
+         * ============================================
+         * MANUAL TIMER (STOPWATCH)
+         * 
+         * Independent timer for manual timing during operations.
+         * Click display to edit, supports MM:SS or HH:MM:SS input.
+         * ============================================
+         */
+
         toggleManualTimer() {
-            if (this.manualTimerRunning) {
-                this.pauseManualTimer();
-            } else {
-                this.startManualTimer();
-            }
+            this.manualTimerRunning ? this.pauseManualTimer() : this.startManualTimer();
         },
 
         startManualTimer() {
-            if (this.manualTimerInterval) return; // Prevent duplicate intervals
+            if (this.manualTimerInterval) return;
             this.manualTimerRunning = true;
-            this.manualTimerInterval = setInterval(() => {
-                this.manualTimer += 100;
-            }, 100);
+            this.manualTimerInterval = setInterval(() => { this.manualTimer += 100; }, 100);
         },
 
         pauseManualTimer() {
@@ -504,11 +440,8 @@ createApp({
         },
 
         editManualTimer() {
-            // Pause timer while editing
             this.wasRunning = this.manualTimerRunning;
-            if (this.manualTimerRunning) {
-                this.pauseManualTimer();
-            }
+            if (this.manualTimerRunning) this.pauseManualTimer();
 
             this.manualTimerEditing = true;
             this.$nextTick(() => {
@@ -522,61 +455,41 @@ createApp({
         },
 
         saveManualTimer(event) {
-            const value = event.target.value.trim();
-            const parts = value.split(':').map(p => p.trim());
+            const parts = event.target.value.trim().split(':').map(p => parseInt(p.trim()));
 
-            // Validate format
-            if (parts.length !== 2 && parts.length !== 3) {
+            if (parts.length < 2 || parts.length > 3 || parts.some(n => isNaN(n) || n < 0)) {
                 alert('Invalid format. Use MM:SS or HH:MM:SS');
                 return;
             }
 
-            // Parse and validate numbers
-            const numbers = parts.map(p => parseInt(p));
-            if (numbers.some(n => isNaN(n) || n < 0)) {
-                alert('Invalid time values. Use positive numbers only.');
-                return;
-            }
-
-            // Validate ranges
             if (parts.length === 2) {
-                const [minutes, seconds] = numbers;
-                if (seconds >= 60) {
-                    alert('Seconds must be less than 60');
-                    return;
-                }
-                this.manualTimer = (minutes * 60 + seconds) * 1000;
-            } else if (parts.length === 3) {
-                const [hours, minutes, seconds] = numbers;
-                if (minutes >= 60 || seconds >= 60) {
-                    alert('Minutes and seconds must be less than 60');
-                    return;
-                }
-                this.manualTimer = (hours * 3600 + minutes * 60 + seconds) * 1000;
+                const [m, s] = parts;
+                if (s >= 60) { alert('Seconds must be < 60'); return; }
+                this.manualTimer = (m * 60 + s) * 1000;
+            } else {
+                const [h, m, s] = parts;
+                if (m >= 60 || s >= 60) { alert('Minutes/seconds must be < 60'); return; }
+                this.manualTimer = (h * 3600 + m * 60 + s) * 1000;
             }
 
             this.manualTimerEditing = false;
-
-            // Resume if it was running
-            if (this.wasRunning) {
-                this.startManualTimer();
-            }
+            if (this.wasRunning) this.startManualTimer();
         },
 
         cancelEditManualTimer(event) {
-            // Only cancel if not pressing Enter
-            if (event.relatedTarget?.classList.contains('timer-save-btn')) {
-                return;
-            }
+            if (event.relatedTarget?.classList.contains('timer-save-btn')) return;
             this.manualTimerEditing = false;
-
-            // Resume if it was running
-            if (this.wasRunning) {
-                this.startManualTimer();
-            }
+            if (this.wasRunning) this.startManualTimer();
         },
 
-        // Modal methods
+        /*
+         * ============================================
+         * MODAL CHART (EXPANDED VIEW)
+         * 
+         * Click any chart panel to open fullscreen with zoom/pan.
+         * ============================================
+         */
+
         openModal(panel) {
             const field = panel.fields[0];
             const data = (this.telemetryData[field] || []).map(d => ({ x: d.time, y: d.value }));
@@ -593,20 +506,15 @@ createApp({
                     this.modalChart.instance = this.chartManager.createModalChart('modal-chart', panel, data);
                 }
             });
-
             document.addEventListener('keydown', this.handleEscKey);
         },
 
         resetZoom() {
-            if (this.chartManager) {
-                this.chartManager.resetModalZoom();
-            }
+            if (this.chartManager) this.chartManager.resetModalZoom();
         },
 
         closeModal() {
-            if (this.chartManager) {
-                this.chartManager.destroyModalChart();
-            }
+            if (this.chartManager) this.chartManager.destroyModalChart();
             this.modalChart.instance = null;
             this.modalChart.visible = false;
             this.modalChart.panelId = null;
@@ -614,9 +522,7 @@ createApp({
         },
 
         handleEscKey(event) {
-            if (event.key === 'Escape' && this.modalChart.visible) {
-                this.closeModal();
-            }
+            if (event.key === 'Escape' && this.modalChart.visible) this.closeModal();
         }
     }
 }).mount('#app');

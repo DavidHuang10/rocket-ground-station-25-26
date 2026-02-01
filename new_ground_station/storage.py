@@ -292,46 +292,6 @@ class StorageManager:
             "saved_at": datetime.now().isoformat()
         }
 
-    def save_and_clear(self) -> Dict:
-        """
-        Archive current flight and clear all data.
-        This is the "end flight and start new" operation.
-        Resets takeoff offset to None.
-
-        Returns:
-            Dict with status, filename, and save time
-        """
-        timestamp = self._generate_timestamp()
-
-        # Ensure current data is flushed
-        self.current_session.csv_file.flush()
-
-        # Close current session
-        self.current_session.close()
-
-        # Copy to backups (redundant backup)
-        src_path = self.log_dir / "current.csv"
-        backup_path = self.backups_dir / f"flight_{timestamp}.csv"
-        self._copy_file(src_path, backup_path)
-
-        # Move to flight_logs (official save and remove from active)
-        archive_path = self.log_dir / f"flight_{timestamp}.csv"
-        self._move_file(src_path, archive_path)
-
-        # Reset takeoff offset
-        self.takeoff_offset_time = None
-        self.takeoff_wall_time = None
-
-        # Create new session with fresh current.csv (old buffer discarded)
-        self.current_session = FlightSession(self.log_dir)
-
-        logger.info(f"Flight saved and cleared: {archive_path.name}")
-
-        return {
-            "status": "success",
-            "filename": archive_path.name,
-            "saved_at": datetime.now().isoformat()
-        }
 
     def get_session_info(self) -> Dict:
         """

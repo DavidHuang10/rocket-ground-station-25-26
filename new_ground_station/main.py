@@ -259,24 +259,6 @@ async def save_flight():
     return result
 
 
-@app.post("/telemetry/save-and-clear")
-async def save_and_clear():
-    """
-    Archive current flight and clear all data.
-    Resets takeoff offset for new session.
-    Broadcasts clear signal to all connected clients.
-    """
-    result = storage_manager.save_and_clear()
-
-    # Broadcast clear signal to all connected clients (with null offset)
-    if result.get("status") == "success":
-        await broadcast_clear_signal(
-            takeoff_offset=None,
-            takeoff_time=None
-        )
-
-    return result
-
 
 # Mount static files last (acts as catch-all for frontend routes)
 # This serves index.html, dash.html, and all static assets
