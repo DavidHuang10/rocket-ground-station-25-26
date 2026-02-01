@@ -4,7 +4,14 @@ import logging
 import serial
 from models import TelemetryData
 from typing import Optional
-import telemetry_pb2
+
+# Protobuf is optional - only needed for real serial data
+try:
+    import telemetry_pb2
+    HAS_PROTOBUF = True
+except ImportError:
+    telemetry_pb2 = None
+    HAS_PROTOBUF = False
 
 
 logger = logging.getLogger(__name__)
