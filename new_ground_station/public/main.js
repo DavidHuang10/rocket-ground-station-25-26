@@ -140,7 +140,7 @@ createApp({
 
                     // Drain buffered messages that arrived during load
                     if (this.messageBuffer.length > 0) {
-                        console.log(`📬 Processing ${this.messageBuffer.length} buffered messages`);
+                        console.log(`Processing ${this.messageBuffer.length} buffered messages`);
                         this.messageBuffer.forEach(msg => this.processTelemetry(msg));
                         this.messageBuffer = [];
                     }
@@ -213,7 +213,14 @@ createApp({
         },
 
         async loadCurrentSession() {
-            console.log('🔄 Loading current session...');
+            console.log('Loading current session...');
+            
+            // Clear existing data to prevent artifacts from mixing old and new data
+            for (const key in this.telemetryData) {
+                this.telemetryData[key] = [];
+            }
+            this.packetCount = 0;
+            
             const response = await fetch('/telemetry/current');
             const result = await response.json();
 
@@ -227,7 +234,7 @@ createApp({
 
             this.sessionInfo = result.session;
             this.packetCount = result.session?.packet_count || 0;
-            console.log(`✅ Loaded ${loaded} data points`);
+            console.log(`Loaded ${loaded} data points`);
 
             this.$nextTick(() => this.updateCharts());
         },
@@ -241,9 +248,9 @@ createApp({
             this.updateCharts();
 
             if (message.takeoff_offset !== null) {
-                console.log(`🚀 Takeoff! T+0 = ${message.takeoff_time}`);
+                console.log(`Takeoff! T+0 = ${message.takeoff_time}`);
             } else {
-                console.log('📊 Charts cleared for new session');
+                console.log('Charts cleared for new session');
             }
         },
 
@@ -331,7 +338,7 @@ createApp({
                 const response = await fetch('/telemetry/clear', { method: 'POST' });
                 const result = await response.json();
                 if (result.status === 'success') {
-                    console.log('✅ Takeoff marked, charts cleared');
+                    console.log('Takeoff marked, charts cleared');
                 } else if (result.status === 'error') {
                     alert(result.message);
                 }
@@ -346,7 +353,7 @@ createApp({
                 const result = await response.json();
                 if (result.status === 'success') {
                     alert(`Flight saved as ${result.filename}`);
-                    console.log('✅ Flight saved:', result.filename);
+                    console.log('Flight saved:', result.filename);
                 }
             } catch (e) {
                 alert(`Failed to save flight: ${e.message}`);
