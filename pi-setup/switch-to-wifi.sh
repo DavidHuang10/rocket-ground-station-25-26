@@ -28,6 +28,7 @@ nmcli connection add \
     connection.autoconnect yes \
     connection.autoconnect-priority 100
 
+nmcli connection up "$WIFI_NAME" || echo "Could not connect now (will work on reboot)"
 # Lower hotspot priority so WiFi wins
 nmcli connection modify ground_station_hotspot connection.autoconnect-priority 0
 

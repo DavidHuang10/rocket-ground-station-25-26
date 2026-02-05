@@ -1,15 +1,26 @@
 /*
  * Mock Arduino Telemetry Transceiver
  * 
- * Demonstrates sending Protobuf telemetry over Serial with Length-Prefix framing.
- * Format: [Length (1 byte)] [Protobuf Payload (N bytes)]
+ * Demonstrates sending Bitproto telemetry over Serial with Length-Prefix framing.
+ * Format: [Length (1 byte)] [Bitproto Payload (N bytes)]
  * 
- * REQUIRES: nanopb library
+ * REQUIRES: Bitproto library (bitproto.h, bitproto.c)
  */
 
-#include "telemetry.pb.h" // You must generate this
-#include "pb_encode.h"
-#include "pb_common.h"
+#include "telemetry_bp.h"
+#include "bitproto.h"
+
+// Helper to convert float to uint32 (preserves IEEE 754 bits)
+union FloatUint32 {
+    float f;
+    uint32_t u;
+};
+
+inline uint32_t floatToUint32(float val) {
+    union FloatUint32 converter;
+    converter.f = val;
+    return converter.u;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -18,7 +29,7 @@ void setup() {
 
 void loop() {
   // 1. Initialize message
-  rocket_telemetry_TelemetryPacket message = rocket_telemetry_TelemetryPacket_init_zero;
+  struct TelemetryPacket message = {0};
 
   // 2. Populate fields with DYNAMIC data
   float t = millis() / 1000.0; // Time in seconds
@@ -29,32 +40,36 @@ void loop() {
   message.gps_alt = 150000;
 
   // DYNAMIC 1: Altitude (Sine Wave 100-200m)
-  message.alt_baro = 150.0 + 50.0 * sin(t * 0.5);
+  float alt_baro = 150.0 + 50.0 * sin(t * 0.5);
+  message.alt_baro = floatToUint32(alt_baro);
 
   // DYNAMIC 2: Vertical Velocity (Cosine)
-  message.vel_vertical = 25.0 * cos(t * 0.5);
-  message.smooth_vel = message.vel_vertical;
+  float vel_vertical = 25.0 * cos(t * 0.5);
+  message.vel_vertical = floatToUint32(vel_vertical);
+  message.smooth_vel = floatToUint32(vel_vertical);
 
   // DYNAMIC 3: Pressure (Inverse of Alt)
-  message.press = 1013.25 - (message.alt_baro / 10.0);
+  float press = 1013.25 - (alt_baro / 10.0);
+  message.press = floatToUint32(press);
 
   // DYNAMIC 4: Accel Z (Gravity + Noise)
-  message.accel_z = 9.81 + (random(-50, 50) / 100.0);
-  message.hg_accel = 9.80;
+  float accel_z = 9.81 + (random(-50, 50) / 100.0);
+  message.accel_z = floatToUint32(accel_z);
+  message.hg_accel = floatToUint32(9.80);
 
-  message.accel_x = 0.5;
-  message.accel_y = 0.12;
-  message.gyro_x = 0.01;
-  message.gyro_y = -0.02;
-  message.gyro_z = 0.00;
+  message.accel_x = floatToUint32(0.5);
+  message.accel_y = floatToUint32(0.12);
+  message.gyro_x = floatToUint32(0.01);
+  message.gyro_y = floatToUint32(-0.02);
+  message.gyro_z = floatToUint32(0.00);
   
-  message.temp = 25.4;
-  message.launchsite_msl = 30.0;
+  message.temp = floatToUint32(25.4);
+  message.launchsite_msl = floatToUint32(30.0);
   
   // Boolean flags 
   message.airbrake_cont = true;
-  message.ab_servo_pct = 45.0;
-  message.cnrd_servo_pct = 0.0;
+  message.ab_servo_pct = floatToUint32(45.0);
+  message.cnrd_servo_pct = floatToUint32(0.0);
   
   message.drogue_pyro_cont_1 = true;
   message.drogue_pyro_cont_2 = true;
@@ -68,25 +83,21 @@ void loop() {
   message.cameras_on = (millis() % 6000) < 3000;
 
   // DYNAMIC 6: Battery - Slow Drain
-  message.battery_voltage = 12.6 - (millis() / 600000.0);
+  float battery_voltage = 12.6 - (millis() / 600000.0);
+  message.battery_voltage = floatToUint32(battery_voltage);
 
   message.flight_stage = 2; // Burn state
 
-  // 3. Encode to Buffer
-  uint8_t buffer[256];
-  pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+  // 3. Encode to Buffer using Bitproto
+  // BYTES_LENGTH_TELEMETRY_PACKET is defined in telemetry_bp.h (89 bytes)
+  uint8_t buffer[BYTES_LENGTH_TELEMETRY_PACKET];
+  memset(buffer, 0, sizeof(buffer));
   
-  bool status = pb_encode(&stream, rocket_telemetry_TelemetryPacket_fields, &message);
-
-  if (!status) {
-    Serial.println("Encoding failed!");
-    return;
-  }
+  int encoded_bytes = EncodeTelemetryPacket(&message, buffer);
 
   // 4. Send Framed Packet: [Length Byte] + [Payload]
-  // Note: Only works if packet size < 255 bytes.
-  
-  uint8_t len = (uint8_t)stream.bytes_written;
+  // Note: Bitproto produces fixed-size output (BYTES_LENGTH_TELEMETRY_PACKET)
+  uint8_t len = BYTES_LENGTH_TELEMETRY_PACKET;
   Serial.write(len);                 // Send Length
   Serial.write(buffer, len);         // Send Payload
   

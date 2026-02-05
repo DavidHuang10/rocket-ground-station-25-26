@@ -1,0 +1,61 @@
+proto telemetry_bp;
+
+message TelemetryPacket {
+    // 1. Time
+    uint32 cur_time = 1;
+
+    // 2. GPS
+    int32 gps_lat = 2; // Scaled by 10^7
+    int32 gps_lng = 3; // Scaled by 10^7
+    int32 gps_alt = 4; // mm
+
+    // 3. IMU
+    // Assuming float is 32-bit (standard IEEE 754 single precision)
+    // bitproto doesn't have a 'float' type natively in v1.0, 
+    // but usually mapped to uint32 or byte array if raw access needed.
+    // HOWEVER, bitproto documentation mentions 'float' is NOT supported?
+    // Let's double check bitproto types.
+    // Wait, bitproto v0.4+ supports: bool, int, uint, byte, array, enum, message.
+    // DOES IT SUPPORT FLOAT?
+    // Searching docs... "Bitproto does not support floating point types."
+    // We must map floats to int/uint (e.g. fixed point) OR cast them to uint32.
+    // Given the current proto uses float, let's treat them as raw uint32 for simple transport,
+    // or better, standard fixed-point if we want "proto-like" behavior.
+    // BUT, to keep migration simple and identical to C memory layout of float, 
+    // we can use `uint32` and cast on both ends. This preserves the exact IEEE 754 bits.
+    
+    // Actually, let's check if we can just define them as uint32 and cast in code.
+    // Yes, that's the standard way in bit-level serialization if the language doesn't support float.
+
+    uint32 accel_x = 5; 
+    uint32 accel_y = 6;
+    uint32 accel_z = 7;
+    uint32 gyro_x = 8;
+    uint32 gyro_y = 9;
+    uint32 gyro_z = 10;
+    uint32 hg_accel = 11;
+
+    // 4. Flight Data
+    uint32 alt_baro = 12;
+    uint32 vel_vertical = 13;
+    uint32 smooth_vel = 14;
+    uint32 press = 15;
+    uint32 temp = 16;
+    uint32 launchsite_msl = 17;
+
+    // 5. Servos & Continuity
+    bool airbrake_cont = 18;
+    uint32 ab_servo_pct = 19;
+    uint32 cnrd_servo_pct = 20;
+    bool drogue_pyro_cont_1 = 21;
+    bool drogue_pyro_cont_2 = 22;
+    bool main_pyro_cont_1 = 23;
+    bool main_pyro_cont_2 = 24;
+
+    // 6. State & Status
+    int32 flight_index = 25;
+    bool ellipse_on = 26;
+    bool cameras_on = 27;
+    uint32 battery_voltage = 28;
+    int32 flight_stage = 29;
+}

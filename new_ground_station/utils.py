@@ -5,13 +5,13 @@ import serial
 from models import TelemetryData
 from typing import Optional
 
-# Protobuf is optional - only needed for real serial data
+# Bitproto is required for serial data decoding
 try:
-    import telemetry_pb2
-    HAS_PROTOBUF = True
+    import telemetry_bp
+    HAS_BITPROTO = True
 except ImportError:
-    telemetry_pb2 = None
-    HAS_PROTOBUF = False
+    telemetry_bp = None
+    HAS_BITPROTO = False
 
 
 logger = logging.getLogger(__name__)
@@ -71,10 +71,17 @@ def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float
 async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
     """
     Read telemetry from serial port (Teensy/LoRa) and put into queue.
-    Uses generic Protobuf + Length-Prefix framing.
-    Format: [Length Byte] [Protobuf Payload]
+    Uses Bitproto + Length-Prefix framing.
+    Format: [Length Byte] [Bitproto Payload]
     """
-    logger.info(f"Starting serial TELEMETRY (PROTOBUF) producer on {port} @ {baudrate}")
+    if not HAS_BITPROTO:
+        logger.error("Bitproto library not available. Cannot decode serial telemetry.")
+        return
+        
+    logger.info(f"Starting serial TELEMETRY (BITPROTO) producer on {port} @ {baudrate}")
+
+    # Expected packet size from Bitproto (defined in telemetry_bp.py)
+    EXPECTED_PACKET_SIZE = telemetry_bp.TelemetryPacket.BYTES_LENGTH
 
     while True:
         try:
@@ -86,17 +93,22 @@ async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, b
                 while True:
                     try:
                         # 1. Read Length (1 byte) via blocking read with small timeout
-                        # We use a small timeout loop to allow checking for cancellation/other tasks
-                         if ser.in_waiting > 0:
+                        if ser.in_waiting > 0:
                             length_byte = ser.read(1)
                             if not length_byte:
                                 await asyncio.sleep(0.01)
                                 continue
                                 
-                            length = length_byte[0] # Convert byte to int
+                            length = length_byte[0]  # Convert byte to int
+                            
+                            # Validate length matches expected Bitproto packet size
+                            if length != EXPECTED_PACKET_SIZE:
+                                logger.warning(f"Unexpected packet size: {length}, expected {EXPECTED_PACKET_SIZE}")
+                                # Skip bytes to try to resync
+                                ser.read(length)
+                                continue
                             
                             # 2. Read Payload (N bytes)
-                            # Loop until we get the full payload
                             payload = b""
                             while len(payload) < length:
                                 remaining = length - len(payload)
@@ -104,25 +116,24 @@ async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, b
                                 if chunk:
                                     payload += chunk
                                 else:
-                                    # Tiny sleep if waiting for bytes
                                     await asyncio.sleep(0.005)
                             
-                            # 3. Decode Protobuf
+                            # 3. Decode Bitproto
                             try:
-                                packet = telemetry_pb2.TelemetryPacket()
-                                packet.ParseFromString(payload)
+                                packet = telemetry_bp.TelemetryPacket()
+                                packet.decode(bytearray(payload))
                                 
                                 # 4. Convert to Model
-                                telemetry = TelemetryData.from_protobuf(packet)
+                                telemetry = TelemetryData.from_bitproto(packet)
                                 
-                                logger.debug(f"Received protobuf packet: time={telemetry.cur_time}")
+                                logger.debug(f"Received bitproto packet: time={telemetry.cur_time}")
                                 
                                 # 5. Put in queue
                                 await telemetry_queue.put(telemetry)
                                 
                             except Exception as e:
-                                logger.warning(f"Error decoding protobuf: {e}")
-                         else:
+                                logger.warning(f"Error decoding bitproto: {e}")
+                        else:
                             await asyncio.sleep(0.01)
 
                     except (OSError, serial.SerialException) as e:
