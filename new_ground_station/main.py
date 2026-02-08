@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 connected_clients: Set[WebSocket] = set()
 
 # Separate queues and storage for each source
-rocket_queue: asyncio.Queue = asyncio.Queue()
+eris_queue: asyncio.Queue = asyncio.Queue()
 payload_queue: asyncio.Queue = asyncio.Queue()
 
 # Storage managers per source (source name in filename)
-rocket_storage = StorageManager(log_dir="flight_logs/rocket")
+eris_storage = StorageManager(log_dir="flight_logs/eris")
 payload_storage = PayloadStorageManager(log_dir="flight_logs/payload")
 
 
@@ -40,22 +40,22 @@ async def lifespan(app: FastAPI):
     logger.info("Ground station server starting up...")
 
     # Start background broadcaster tasks (one per source)
-    rocket_broadcaster = asyncio.create_task(broadcast_rocket_telemetry())
+    eris_broadcaster = asyncio.create_task(broadcast_eris_telemetry())
     payload_broadcaster = asyncio.create_task(broadcast_payload_telemetry())
     
     producer_tasks = []
     
-    # Check for rocket serial port
-    rocket_serial = os.environ.get("ROCKET_SERIAL")
-    if rocket_serial:
-        logger.info(f"Starting ROCKET in REAL mode: {rocket_serial}")
+    # Check for eris serial port
+    eris_serial = os.environ.get("ERIS_SERIAL")
+    if eris_serial:
+        logger.info(f"Starting ERIS in REAL mode: {eris_serial}")
         producer_tasks.append(asyncio.create_task(
-            serial_telemetry_producer(rocket_queue, rocket_serial)
+            serial_telemetry_producer(eris_queue, eris_serial)
         ))
     else:
-        logger.info("Starting ROCKET in MOCK mode")
+        logger.info("Starting ERIS in MOCK mode")
         producer_tasks.append(asyncio.create_task(
-            mock_telemetry_producer(rocket_queue)
+            mock_telemetry_producer(eris_queue)
         ))
     
     # Check for payload serial port
@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Ground station server shutting down...")
 
-    rocket_broadcaster.cancel()
+    eris_broadcaster.cancel()
     payload_broadcaster.cancel()
     for task in producer_tasks:
         task.cancel()
@@ -155,13 +155,13 @@ async def broadcast_clear_signal(page: str, takeoff_offset: float = None, takeof
     logger.info(f"Broadcasted clear signal for {page} (offset={takeoff_offset})")
 
 
-async def broadcast_rocket_telemetry():
-    """Background task that processes rocket telemetry and broadcasts with page tag."""
-    logger.info("Rocket telemetry broadcaster started")
+async def broadcast_eris_telemetry():
+    """Background task that processes Eris telemetry and broadcasts with page tag."""
+    logger.info("Eris telemetry broadcaster started")
 
     while True:
         try:
-            data = await rocket_queue.get()
+            data = await eris_queue.get()
 
             try:
                 if isinstance(data, str):
@@ -169,28 +169,28 @@ async def broadcast_rocket_telemetry():
                 elif isinstance(data, FlightComputerTelemetryData):
                     telemetry = data
                 else:
-                    logger.warning(f"Unknown rocket data type: {type(data)}")
-                    rocket_queue.task_done()
+                    logger.warning(f"Unknown Eris data type: {type(data)}")
+                    eris_queue.task_done()
                     continue
             except (ValueError, Exception) as e:
-                logger.error(f"Failed to parse rocket telemetry: {e}")
-                rocket_queue.task_done()
+                logger.error(f"Failed to parse Eris telemetry: {e}")
+                eris_queue.task_done()
                 continue
 
-            rocket_storage.add_telemetry(telemetry)
+            eris_storage.add_telemetry(telemetry)
 
             # Format with page tag
             message_data = {
-                "page": "rocket",
-                "data": format_for_frontend(telemetry, rocket_storage.takeoff_offset_time)
+                "page": "eris",
+                "data": format_for_frontend(telemetry, eris_storage.takeoff_offset_time)
             }
             message_json = json.dumps(message_data)
 
             await broadcast_message(message_json)
-            rocket_queue.task_done()
+            eris_queue.task_done()
 
         except Exception as e:
-            logger.error(f"Error in rocket broadcast loop: {e}")
+            logger.error(f"Error in Eris broadcast loop: {e}")
 
 
 async def broadcast_payload_telemetry():
@@ -233,10 +233,10 @@ async def broadcast_payload_telemetry():
 # Testing endpoint
 @app.post("/telemetry/inject")
 async def inject_telemetry(csv_data: str):
-    """Manual telemetry injection endpoint for testing (rocket only)."""
+    """Manual telemetry injection endpoint for testing (Eris only)."""
     try:
         FlightComputerTelemetryData.from_csv(csv_data)
-        await rocket_queue.put(csv_data)
+        await eris_queue.put(csv_data)
         return {"status": "success", "message": "Telemetry queued"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -248,7 +248,7 @@ async def health_check():
     return {
         "status": "healthy",
         "connected_clients": len(connected_clients),
-        "rocket_queue_size": rocket_queue.qsize(),
+        "eris_queue_size": eris_queue.qsize(),
         "payload_queue_size": payload_queue.qsize()
     }
 
@@ -256,10 +256,10 @@ async def health_check():
 @app.get("/telemetry/current/{page}")
 async def get_current_telemetry(page: str):
     """Get all telemetry from current session for a specific page."""
-    if page == "rocket":
+    if page == "eris":
         return {
-            "data": rocket_storage.get_current_data(),
-            "session": rocket_storage.get_session_info()
+            "data": eris_storage.get_current_data(),
+            "session": eris_storage.get_session_info()
         }
     elif page == "payload":
         return {
@@ -273,8 +273,8 @@ async def get_current_telemetry(page: str):
 @app.post("/telemetry/clear/{page}")
 async def clear_telemetry(page: str):
     """Clear charts and mark takeoff for a specific page."""
-    if page == "rocket":
-        result = rocket_storage.clear_data()
+    if page == "eris":
+        result = eris_storage.clear_data()
     elif page == "payload":
         result = payload_storage.clear_data()
     else:
@@ -293,8 +293,8 @@ async def clear_telemetry(page: str):
 @app.post("/telemetry/save/{page}")
 async def save_flight(page: str):
     """Archive current flight for a specific page."""
-    if page == "rocket":
-        result = rocket_storage.save_flight()
+    if page == "eris":
+        result = eris_storage.save_flight()
     elif page == "payload":
         result = payload_storage.save_flight()
     else:

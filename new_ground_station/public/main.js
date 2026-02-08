@@ -1,7 +1,7 @@
 /**
  * ERIS Ground Station Dashboard
  * 
- * Vue 3 application for real-time rocket telemetry visualization.
+ * Vue 3 application for real-time Eris telemetry visualization.
  * Connects via WebSocket for live data, fetches historical data on load,
  * and displays telemetry in configurable chart/indicator panels.
  */
@@ -20,8 +20,8 @@ createApp({
 
             // Data management
             config: null,
-            currentPage: 'rocket',  // Default page
-            pageData: {},           // Telemetry data per page: {rocket: {...}, payload: {...}}
+            currentPage: 'eris',  // Default page
+            pageData: {},           // Telemetry data per page: {eris: {...}, payload: {...}}
             sessionInfo: {},        // Session info per page
             packetCount: {},        // Packet count per page
             
@@ -210,7 +210,7 @@ createApp({
                         return;
                     }
 
-                    // Handle page-tagged telemetry: {page: 'rocket', data: [...]}
+                    // Handle page-tagged telemetry: {page: 'eris', data: [...]}
                     if (message.page && message.data) {
                         const pageId = message.page;
                         if (!this.historicalDataLoaded[pageId]) {
@@ -238,7 +238,12 @@ createApp({
         },
 
         reconnect() {
-            if (this.ws) this.ws.close();
+            if (this.ws) {
+                // Remove onclose listener to prevent auto-reconnect trigger
+                this.ws.onclose = null;
+                this.ws.close();
+            }
+            this.connected = false;
             this.connect();
         },
 

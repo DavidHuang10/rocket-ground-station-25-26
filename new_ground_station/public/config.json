@@ -1,8 +1,8 @@
 {
   "pages": [
     {
-      "id": "rocket",
-      "name": "Rocket",
+      "id": "eris",
+      "name": "Eris",
       "panels": [
         {
           "id": "mission_timer",

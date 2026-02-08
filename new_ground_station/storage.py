@@ -78,11 +78,11 @@ class BaseFlightSession(ABC, Generic[T]):
         pass
 
 
-class RocketFlightSession(BaseFlightSession[FlightComputerTelemetryData]):
-    """Flight session for rocket/flight computer telemetry."""
+class ErisFlightSession(BaseFlightSession[FlightComputerTelemetryData]):
+    """Flight session for Eris flight computer telemetry."""
 
     def __init__(self, log_dir: Path):
-        super().__init__(log_dir, "Rocket")
+        super().__init__(log_dir, "Eris")
 
     def _write_csv_header(self):
         header = [
@@ -272,13 +272,13 @@ class BaseStorageManager(ABC, Generic[T]):
 
 
 class StorageManager(BaseStorageManager[FlightComputerTelemetryData]):
-    """Storage manager for rocket/flight computer telemetry."""
+    """Storage manager for Eris flight computer telemetry."""
 
-    def __init__(self, log_dir: str = "flight_logs/rocket"):
-        super().__init__(log_dir, backup_prefix="")
+    def __init__(self, log_dir: str = "flight_logs/eris"):
+        super().__init__(log_dir, backup_prefix="eris")
 
-    def _create_session(self) -> RocketFlightSession:
-        return RocketFlightSession(self.log_dir)
+    def _create_session(self) -> ErisFlightSession:
+        return ErisFlightSession(self.log_dir)
 
 
 class PayloadStorageManager(BaseStorageManager[PayloadTelemetryData]):
