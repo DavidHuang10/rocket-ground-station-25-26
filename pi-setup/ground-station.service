@@ -13,8 +13,10 @@ Restart=always
 RestartSec=5
 
 # Environment
+# User will plug in Eris first (ACM0) then Payload (ACM1)
+Environment=ERIS_SERIAL=/dev/ttyACM0
+Environment=PAYLOAD_SERIAL=/dev/ttyACM1
 Environment=PYTHONUNBUFFERED=1
-Environment=SERIAL_PORT=/dev/ttyACM0
 
 [Install]
 WantedBy=multi-user.target
