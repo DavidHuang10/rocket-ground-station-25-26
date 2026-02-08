@@ -15,7 +15,7 @@ from utils import (
     serial_telemetry_producer,
     payload_serial_producer
 )
-from storage import StorageManager
+from storage import StorageManager, PayloadStorageManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,7 +31,7 @@ payload_queue: asyncio.Queue = asyncio.Queue()
 
 # Storage managers per source (source name in filename)
 rocket_storage = StorageManager(log_dir="flight_logs/rocket")
-payload_storage = StorageManager(log_dir="flight_logs/payload")
+payload_storage = PayloadStorageManager(log_dir="flight_logs/payload")
 
 
 @asynccontextmanager
@@ -213,10 +213,8 @@ async def broadcast_payload_telemetry():
                 payload_queue.task_done()
                 continue
 
-            # Track telemetry time for payload (enables "Clear Charts" to work)
-            # We don't call add_telemetry since StorageManager expects FlightComputerTelemetryData,
-            # but we DO need to track last_telemetry_time for the clear/takeoff functionality.
-            payload_storage.last_telemetry_time = telemetry.cur_time / 1000.0
+            # Store payload telemetry (handles CSV writing and time tracking)
+            payload_storage.add_telemetry(telemetry)
 
             # Format with page tag
             message_data = {
