@@ -12,7 +12,8 @@ from utils import (
     format_payload_for_frontend,
     mock_telemetry_producer, 
     mock_payload_producer,
-    serial_telemetry_producer
+    serial_telemetry_producer,
+    payload_serial_producer
 )
 from storage import StorageManager
 
@@ -61,9 +62,8 @@ async def lifespan(app: FastAPI):
     payload_serial = os.environ.get("PAYLOAD_SERIAL")
     if payload_serial:
         logger.info(f"Starting PAYLOAD in REAL mode: {payload_serial}")
-        # TODO: Add payload_serial_producer when implemented
         producer_tasks.append(asyncio.create_task(
-            mock_payload_producer(payload_queue)
+            payload_serial_producer(payload_queue, payload_serial)
         ))
     else:
         logger.info("Starting PAYLOAD in MOCK mode")
@@ -213,10 +213,10 @@ async def broadcast_payload_telemetry():
                 payload_queue.task_done()
                 continue
 
-            # Note: payload_storage uses FlightComputerTelemetryData type,
-            # but PayloadTelemetryData has different fields.
-            # For now, skip storage for payload until we update StorageManager.
-            # payload_storage.add_telemetry(telemetry)
+            # Track telemetry time for payload (enables "Clear Charts" to work)
+            # We don't call add_telemetry since StorageManager expects FlightComputerTelemetryData,
+            # but we DO need to track last_telemetry_time for the clear/takeoff functionality.
+            payload_storage.last_telemetry_time = telemetry.cur_time / 1000.0
 
             # Format with page tag
             message_data = {

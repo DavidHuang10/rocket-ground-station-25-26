@@ -183,6 +183,87 @@ async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, b
             await asyncio.sleep(2)
 
 
+async def payload_serial_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
+    """
+    Read payload telemetry from serial port and put into queue.
+    Uses Bitproto + Length-Prefix framing.
+    Format: [Length Byte] [Bitproto Payload]
+    """
+    if not HAS_PAYLOAD_BITPROTO:
+        logger.error("Payload Bitproto library not available. Cannot decode payload telemetry.")
+        return
+        
+    logger.info(f"Starting serial PAYLOAD (BITPROTO) producer on {port} @ {baudrate}")
+
+    # Expected packet size from Bitproto (defined in payload_bp.py)
+    EXPECTED_PACKET_SIZE = payload_bp.PayloadPacket.BYTES_LENGTH
+
+    while True:
+        try:
+            # Open serial connection
+            with serial.Serial(port, baudrate, timeout=0.1) as ser:
+                logger.info(f"Connected to payload serial: {port}")
+                ser.reset_input_buffer()
+                
+                while True:
+                    try:
+                        # 1. Read Length (1 byte) via blocking read with small timeout
+                        if ser.in_waiting > 0:
+                            length_byte = ser.read(1)
+                            if not length_byte:
+                                await asyncio.sleep(0.01)
+                                continue
+                                
+                            length = length_byte[0]  # Convert byte to int
+                            
+                            # Validate length matches expected Bitproto packet size
+                            if length != EXPECTED_PACKET_SIZE:
+                                logger.warning(f"Unexpected payload packet size: {length}, expected {EXPECTED_PACKET_SIZE}")
+                                # Skip bytes to try to resync
+                                ser.read(length)
+                                continue
+                            
+                            # 2. Read Payload (N bytes)
+                            payload = b""
+                            while len(payload) < length:
+                                remaining = length - len(payload)
+                                chunk = ser.read(remaining)
+                                if chunk:
+                                    payload += chunk
+                                else:
+                                    await asyncio.sleep(0.005)
+                            
+                            # 3. Decode Bitproto
+                            try:
+                                packet = payload_bp.PayloadPacket()
+                                packet.decode(bytearray(payload))
+                                
+                                # 4. Convert to Model
+                                telemetry = PayloadTelemetryData.from_bitproto(packet)
+                                
+                                logger.debug(f"Received payload packet: time={telemetry.cur_time}")
+                                
+                                # 5. Put in queue
+                                await telemetry_queue.put(telemetry)
+                                
+                            except Exception as e:
+                                logger.warning(f"Error decoding payload bitproto: {e}")
+                        else:
+                            await asyncio.sleep(0.01)
+
+                    except (OSError, serial.SerialException) as e:
+                        logger.error(f"Payload serial read error: {e}")
+                        break 
+                        
+        except (OSError, serial.SerialException) as e:
+            logger.error(f"Failed to connect to payload serial {port}: {e}")
+            logger.info("Retrying in 2 seconds...")
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.error(f"Unexpected error in payload serial producer: {e}")
+            await asyncio.sleep(2)
+
+
 async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
     """
     Mock telemetry data producer for testing.
