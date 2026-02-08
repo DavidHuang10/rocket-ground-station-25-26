@@ -1,0 +1,22 @@
+proto payload_bp;
+
+// Payload telemetry - subset of flight computer fields plus payload-specific fields
+message PayloadPacket {
+    // 1. Time
+    uint32 cur_time = 1;
+
+    // 2. GPS (shared with flight computer)
+    int32 gps_lat = 2;   // Scaled by 10^7
+    int32 gps_lng = 3;   // Scaled by 10^7
+    int32 gps_alt = 4;   // mm
+
+    // 3. Motion (subset)
+    uint32 velocity = 5;     // IEEE 754 float as uint32
+    uint32 accel_x = 6;      // IEEE 754 float as uint32
+    uint32 accel_y = 7;      // IEEE 754 float as uint32
+    uint32 accel_z = 8;      // IEEE 754 float as uint32
+
+    // 4. Payload-specific fields
+    uint32 distance_to_target = 9;   // IEEE 754 float as uint32, meters
+    bool destination_reached = 10;   // Categorical: true = reached, false = in transit
+}

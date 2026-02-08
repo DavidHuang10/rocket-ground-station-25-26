@@ -2,24 +2,31 @@
 import asyncio
 import logging
 import serial
-from models import TelemetryData
+from models import FlightComputerTelemetryData, PayloadTelemetryData
 from typing import Optional
 
 # Bitproto is required for serial data decoding
 try:
     import telemetry_bp
-    HAS_BITPROTO = True
+    HAS_ERIS_BITPROTO = True
 except ImportError:
     telemetry_bp = None
-    HAS_BITPROTO = False
+    HAS_ERIS_BITPROTO = False
+
+try:
+    import payload_bp
+    HAS_PAYLOAD_BITPROTO = True
+except ImportError:
+    payload_bp = None
+    HAS_PAYLOAD_BITPROTO = False
 
 
 logger = logging.getLogger(__name__)
 
 
-def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float] = None) -> list:
+def format_for_frontend(telemetry: FlightComputerTelemetryData, takeoff_offset: Optional[float] = None) -> list:
     """
-    Transform TelemetryData to frontend format.
+    Transform FlightComputerTelemetryData to frontend format.
 
     Frontend expects: [{time, source, value}, ...]
     where time is in seconds.
@@ -68,13 +75,40 @@ def format_for_frontend(telemetry: TelemetryData, takeoff_offset: Optional[float
     ]
 
 
+def format_payload_for_frontend(telemetry: PayloadTelemetryData, takeoff_offset: Optional[float] = None) -> list:
+    """
+    Transform PayloadTelemetryData to frontend format.
+
+    Args:
+        telemetry: Payload telemetry data to format
+        takeoff_offset: Optional offset in seconds for time adjustment.
+    """
+    time = telemetry.cur_time / 1000.0
+
+    if takeoff_offset is not None:
+        time = time - takeoff_offset
+
+    return [
+        {"time": time, "source": "cur_time", "value": telemetry.cur_time},
+        {"time": time, "source": "lat", "value": telemetry.get_gps_lat_degrees()},
+        {"time": time, "source": "long", "value": telemetry.get_gps_lng_degrees()},
+        {"time": time, "source": "gps_alt", "value": telemetry.get_gps_alt_meters()},
+        {"time": time, "source": "velocity", "value": telemetry.velocity},
+        {"time": time, "source": "accelx", "value": telemetry.accel_x},
+        {"time": time, "source": "accely", "value": telemetry.accel_y},
+        {"time": time, "source": "accelz", "value": telemetry.accel_z},
+        {"time": time, "source": "distance_to_target", "value": telemetry.distance_to_target},
+        {"time": time, "source": "destination_reached", "value": int(telemetry.destination_reached)},
+    ]
+
+
 async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
     """
     Read telemetry from serial port (Teensy/LoRa) and put into queue.
     Uses Bitproto + Length-Prefix framing.
     Format: [Length Byte] [Bitproto Payload]
     """
-    if not HAS_BITPROTO:
+    if not HAS_ERIS_BITPROTO:
         logger.error("Bitproto library not available. Cannot decode serial telemetry.")
         return
         
@@ -124,7 +158,7 @@ async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, b
                                 packet.decode(bytearray(payload))
                                 
                                 # 4. Convert to Model
-                                telemetry = TelemetryData.from_bitproto(packet)
+                                telemetry = FlightComputerTelemetryData.from_bitproto(packet)
                                 
                                 logger.debug(f"Received bitproto packet: time={telemetry.cur_time}")
                                 
@@ -206,5 +240,50 @@ async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
         await telemetry_queue.put(csv_data)
 
         # Increment time and wait 500ms
+        flight_time += 500
+        await asyncio.sleep(0.5)
+
+
+async def mock_payload_producer(telemetry_queue: asyncio.Queue):
+    """
+    Mock payload telemetry producer for testing.
+    Generates payload data with GPS, velocity, accel, plus distance_to_target and destination_reached.
+    """
+    import math
+    import random
+    logger.info("Mock payload producer started")
+
+    flight_time = 0
+    while True:
+        t = flight_time / 1000.0
+
+        # Shared fields (similar to rocket but slightly different trajectory)
+        velocity = 30 - 2 * t
+        accel_x = 5.0 + math.sin(t * 1.5) * 3
+        accel_y = 0.2 + math.cos(t * 1.2) * 1
+        accel_z = -9.8 + math.sin(t * 2) * 0.5
+
+        # Payload-specific: distance decreases over time with random variation
+        distance_to_target = max(0, 1000 - t * 50 + random.uniform(-20, 20))
+        
+        # Destination reached: flip every 10 seconds
+        destination_reached = int(t / 10) % 2 == 1
+
+        # Create PayloadTelemetryData object directly
+        payload = PayloadTelemetryData(
+            cur_time=flight_time,
+            gps_lat=359940330,
+            gps_lng=-788986220,
+            gps_alt=150000 + int(t * 1000),
+            velocity=velocity,
+            accel_x=accel_x,
+            accel_y=accel_y,
+            accel_z=accel_z,
+            distance_to_target=distance_to_target,
+            destination_reached=destination_reached
+        )
+
+        await telemetry_queue.put(payload)
+
         flight_time += 500
         await asyncio.sleep(0.5)

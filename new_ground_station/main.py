@@ -2,12 +2,18 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
-from typing import Set
+from typing import Set, Dict
 import logging
 import json
 import os
-from models import TelemetryData
-from utils import format_for_frontend, mock_telemetry_producer, serial_telemetry_producer
+from models import FlightComputerTelemetryData, PayloadTelemetryData
+from utils import (
+    format_for_frontend, 
+    format_payload_for_frontend,
+    mock_telemetry_producer, 
+    mock_payload_producer,
+    serial_telemetry_producer
+)
 from storage import StorageManager
 
 logging.basicConfig(
@@ -17,29 +23,53 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 connected_clients: Set[WebSocket] = set()
-telemetry_queue: asyncio.Queue = asyncio.Queue()
-storage_manager = StorageManager(log_dir="flight_logs")
 
+# Separate queues and storage for each source
+rocket_queue: asyncio.Queue = asyncio.Queue()
+payload_queue: asyncio.Queue = asyncio.Queue()
+
+# Storage managers per source (source name in filename)
+rocket_storage = StorageManager(log_dir="flight_logs/rocket")
+payload_storage = StorageManager(log_dir="flight_logs/payload")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan: startup and shutdown logic."""
-    # Startup
     logger.info("Ground station server starting up...")
 
-    # Start background tasks
-    broadcaster_task = asyncio.create_task(broadcast_telemetry())
+    # Start background broadcaster tasks (one per source)
+    rocket_broadcaster = asyncio.create_task(broadcast_rocket_telemetry())
+    payload_broadcaster = asyncio.create_task(broadcast_payload_telemetry())
     
-    # Get serial port from environment variable
-    serial_port = os.environ.get("SERIAL_PORT")
+    producer_tasks = []
     
-    if serial_port:
-        logger.info(f"Starting in REAL mode with serial port: {serial_port}")
-        producer_task = asyncio.create_task(serial_telemetry_producer(telemetry_queue, serial_port))
+    # Check for rocket serial port
+    rocket_serial = os.environ.get("ROCKET_SERIAL")
+    if rocket_serial:
+        logger.info(f"Starting ROCKET in REAL mode: {rocket_serial}")
+        producer_tasks.append(asyncio.create_task(
+            serial_telemetry_producer(rocket_queue, rocket_serial)
+        ))
     else:
-        logger.info("Starting in MOCK mode (no SERIAL_PORT env var set)")
-        producer_task = asyncio.create_task(mock_telemetry_producer(telemetry_queue))
+        logger.info("Starting ROCKET in MOCK mode")
+        producer_tasks.append(asyncio.create_task(
+            mock_telemetry_producer(rocket_queue)
+        ))
+    
+    # Check for payload serial port
+    payload_serial = os.environ.get("PAYLOAD_SERIAL")
+    if payload_serial:
+        logger.info(f"Starting PAYLOAD in REAL mode: {payload_serial}")
+        # TODO: Add payload_serial_producer when implemented
+        producer_tasks.append(asyncio.create_task(
+            mock_payload_producer(payload_queue)
+        ))
+    else:
+        logger.info("Starting PAYLOAD in MOCK mode")
+        producer_tasks.append(asyncio.create_task(
+            mock_payload_producer(payload_queue)
+        ))
 
     logger.info("Background tasks started")
 
@@ -48,11 +78,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Ground station server shutting down...")
 
-    # Cancel background tasks
-    broadcaster_task.cancel()
-    producer_task.cancel()
+    rocket_broadcaster.cancel()
+    payload_broadcaster.cancel()
+    for task in producer_tasks:
+        task.cancel()
 
-    # Close all WebSocket connections
     for client in connected_clients.copy():
         try:
             await client.close()
@@ -64,32 +94,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ERIS Ground Station",
-    description="Real-time telemetry receiver and dashboard for ERIS Gamma",
-    version="1.0.0",
+    description="Real-time telemetry receiver and dashboard for ERIS Delta",
+    version="2.0.0",
     lifespan=lifespan
 )
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket endpoint for streaming telemetry data to frontend clients.
-
-    Accepts connections, maintains them in the connected_clients set,
-    and handles graceful disconnection.
-    """
-    # Accept the WebSocket connection
+    """WebSocket endpoint for streaming telemetry data to frontend clients."""
     await websocket.accept()
     connected_clients.add(websocket)
     logger.info(f"WebSocket connected. Total clients: {len(connected_clients)}")
 
     try:
-        # Keep connection alive and wait for client messages or disconnect
         while True:
-            # Receive messages from client (ping/pong, etc.)
             try:
                 message = await websocket.receive_text()
-                # Handle ping/pong for heartbeat
                 if message == "ping":
                     await websocket.send_text("pong")
             except WebSocketDisconnect:
@@ -99,18 +120,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
     finally:
-        # Remove client from connected set on disconnect
         connected_clients.discard(websocket)
         logger.info(f"WebSocket disconnected. Total clients: {len(connected_clients)}")
 
 
 async def broadcast_message(message: str):
-    """
-    Broadcast a message to all connected WebSocket clients.
-
-    Args:
-        message: JSON string to broadcast
-    """
+    """Broadcast a message to all connected WebSocket clients."""
     if not connected_clients:
         return
 
@@ -122,89 +137,108 @@ async def broadcast_message(message: str):
             logger.warning(f"Failed to send to client: {e}")
             disconnected.add(client)
 
-    # Remove disconnected clients
     if disconnected:
         connected_clients.difference_update(disconnected)
         logger.info(f"Removed {len(disconnected)} disconnected clients")
 
 
-async def broadcast_clear_signal(takeoff_offset: float = None, takeoff_time: str = None):
-    """
-    Broadcast clear signal to all connected clients.
-
-    Args:
-        takeoff_offset: Takeoff offset in seconds (None if not a takeoff clear)
-        takeoff_time: ISO timestamp of takeoff (None if not a takeoff clear)
-    """
+async def broadcast_clear_signal(page: str, takeoff_offset: float = None, takeoff_time: str = None):
+    """Broadcast clear signal to all connected clients for a specific page."""
     message = {
         "type": "clear",
+        "page": page,
         "takeoff_offset": takeoff_offset,
         "takeoff_time": takeoff_time
     }
     message_json = json.dumps(message)
     await broadcast_message(message_json)
-    logger.info(f"Broadcasted clear signal (offset={takeoff_offset})")
+    logger.info(f"Broadcasted clear signal for {page} (offset={takeoff_offset})")
 
 
-async def broadcast_telemetry():
-    """
-    Background task that consumes telemetry from queue and broadcasts to all clients.
-
-    Runs continuously, processing telemetry data from the queue, parsing it,
-    and sending to all connected WebSocket clients.
-    """
-    logger.info("Telemetry broadcaster started")
+async def broadcast_rocket_telemetry():
+    """Background task that processes rocket telemetry and broadcasts with page tag."""
+    logger.info("Rocket telemetry broadcaster started")
 
     while True:
         try:
-            # Get telemetry data from queue (can be CSV string or TelemetryData object)
-            data = await telemetry_queue.get()
+            data = await rocket_queue.get()
 
-            # Parse data
             try:
                 if isinstance(data, str):
-                    telemetry = TelemetryData.from_csv(data)
-                elif isinstance(data, TelemetryData):
+                    telemetry = FlightComputerTelemetryData.from_csv(data)
+                elif isinstance(data, FlightComputerTelemetryData):
                     telemetry = data
                 else:
-                    logger.warning(f"Unknown data type in queue: {type(data)}")
-                    telemetry_queue.task_done()
+                    logger.warning(f"Unknown rocket data type: {type(data)}")
+                    rocket_queue.task_done()
                     continue
             except (ValueError, Exception) as e:
-                logger.error(f"Failed to parse telemetry: {e}")
-                telemetry_queue.task_done()
+                logger.error(f"Failed to parse rocket telemetry: {e}")
+                rocket_queue.task_done()
                 continue
 
-            # Save to storage
-            storage_manager.add_telemetry(telemetry)
+            rocket_storage.add_telemetry(telemetry)
 
-            # Format data for frontend (with time adjustment if takeoff has occurred)
-            message_data = format_for_frontend(telemetry, storage_manager.takeoff_offset_time)
+            # Format with page tag
+            message_data = {
+                "page": "rocket",
+                "data": format_for_frontend(telemetry, rocket_storage.takeoff_offset_time)
+            }
             message_json = json.dumps(message_data)
 
-            # Broadcast to all connected clients
             await broadcast_message(message_json)
-
-            # Mark task as done
-            telemetry_queue.task_done()
+            rocket_queue.task_done()
 
         except Exception as e:
-            logger.error(f"Error in broadcast loop: {e}")
-            # Continue running even if there's an error
+            logger.error(f"Error in rocket broadcast loop: {e}")
 
-#for testing
+
+async def broadcast_payload_telemetry():
+    """Background task that processes payload telemetry and broadcasts with page tag."""
+    logger.info("Payload telemetry broadcaster started")
+
+    while True:
+        try:
+            data = await payload_queue.get()
+
+            try:
+                if isinstance(data, PayloadTelemetryData):
+                    telemetry = data
+                else:
+                    logger.warning(f"Unknown payload data type: {type(data)}")
+                    payload_queue.task_done()
+                    continue
+            except (ValueError, Exception) as e:
+                logger.error(f"Failed to parse payload telemetry: {e}")
+                payload_queue.task_done()
+                continue
+
+            # Note: payload_storage uses FlightComputerTelemetryData type,
+            # but PayloadTelemetryData has different fields.
+            # For now, skip storage for payload until we update StorageManager.
+            # payload_storage.add_telemetry(telemetry)
+
+            # Format with page tag
+            message_data = {
+                "page": "payload",
+                "data": format_payload_for_frontend(telemetry, payload_storage.takeoff_offset_time)
+            }
+            message_json = json.dumps(message_data)
+
+            await broadcast_message(message_json)
+            payload_queue.task_done()
+
+        except Exception as e:
+            logger.error(f"Error in payload broadcast loop: {e}")
+
+
+# Testing endpoint
 @app.post("/telemetry/inject")
 async def inject_telemetry(csv_data: str):
-    """
-    Manual telemetry injection endpoint for testing.
-
-    Allows posting CSV telemetry data directly to the queue.
-    """
+    """Manual telemetry injection endpoint for testing (rocket only)."""
     try:
-        # Validate the CSV can be parsed
-        TelemetryData.from_csv(csv_data)
-        # Add to queue
-        await telemetry_queue.put(csv_data)
+        FlightComputerTelemetryData.from_csv(csv_data)
+        await rocket_queue.put(csv_data)
         return {"status": "success", "message": "Telemetry queued"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -216,31 +250,41 @@ async def health_check():
     return {
         "status": "healthy",
         "connected_clients": len(connected_clients),
-        "queue_size": telemetry_queue.qsize()
+        "rocket_queue_size": rocket_queue.qsize(),
+        "payload_queue_size": payload_queue.qsize()
     }
 
 
-@app.get("/telemetry/current")
-async def get_current_telemetry():
-    """Get all telemetry from current session."""
-    return {
-        "data": storage_manager.get_current_data(),
-        "session": storage_manager.get_session_info()
-    }
+@app.get("/telemetry/current/{page}")
+async def get_current_telemetry(page: str):
+    """Get all telemetry from current session for a specific page."""
+    if page == "rocket":
+        return {
+            "data": rocket_storage.get_current_data(),
+            "session": rocket_storage.get_session_info()
+        }
+    elif page == "payload":
+        return {
+            "data": payload_storage.get_current_data(),
+            "session": payload_storage.get_session_info()
+        }
+    else:
+        return {"error": f"Unknown page: {page}"}
 
 
-@app.post("/telemetry/clear")
-async def clear_telemetry():
-    """
-    Clear charts and mark takeoff (T+0).
-    Backs up pre-flight data to backups/pre_flight_*.csv.
-    Broadcasts clear signal to all connected clients.
-    """
-    result = storage_manager.clear_data()
+@app.post("/telemetry/clear/{page}")
+async def clear_telemetry(page: str):
+    """Clear charts and mark takeoff for a specific page."""
+    if page == "rocket":
+        result = rocket_storage.clear_data()
+    elif page == "payload":
+        result = payload_storage.clear_data()
+    else:
+        return {"error": f"Unknown page: {page}"}
 
-    # Broadcast clear signal to all connected clients
     if result.get("status") == "success":
         await broadcast_clear_signal(
+            page=page,
             takeoff_offset=result.get("takeoff_offset"),
             takeoff_time=result.get("takeoff_time")
         )
@@ -248,20 +292,20 @@ async def clear_telemetry():
     return result
 
 
-@app.post("/telemetry/save")
-async def save_flight():
-    """
-    Archive current flight to timestamped CSV file.
-    Copies to both backups/ and flight_logs/.
-    Recording continues.
-    """
-    result = storage_manager.save_flight()
+@app.post("/telemetry/save/{page}")
+async def save_flight(page: str):
+    """Archive current flight for a specific page."""
+    if page == "rocket":
+        result = rocket_storage.save_flight()
+    elif page == "payload":
+        result = payload_storage.save_flight()
+    else:
+        return {"error": f"Unknown page: {page}"}
+    
     return result
 
 
-
-# Mount static files last (acts as catch-all for frontend routes)
-# This serves index.html, dash.html, and all static assets
+# Mount static files last
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
-from models import TelemetryData
+from models import FlightComputerTelemetryData
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class FlightSession:
         """
         self.log_dir = log_dir
         self.start_time = datetime.now()
-        self.telemetry_buffer: List[TelemetryData] = []
+        self.telemetry_buffer: List[FlightComputerTelemetryData] = []
 
         # Always write to "current.csv"
         self.csv_path = log_dir / "current.csv"
@@ -39,7 +39,7 @@ class FlightSession:
 
         logger.info(f"Flight session started: {self.csv_path}")
 
-    def add_telemetry(self, telemetry: TelemetryData):
+    def add_telemetry(self, telemetry: FlightComputerTelemetryData):
         """
         Add telemetry packet to session.
         Appends to in-memory buffer and writes to CSV file.
@@ -112,7 +112,7 @@ class FlightSession:
         ]
         self.csv_writer.writerow(header)
 
-    def _append_csv_row(self, telemetry: TelemetryData):
+    def _append_csv_row(self, telemetry: FlightComputerTelemetryData):
         """
         Append single telemetry packet as CSV row.
 
@@ -199,7 +199,7 @@ class StorageManager:
         logger.info(f"Storage manager initialized: {self.log_dir}")
         logger.info(f"Backups directory: {self.backups_dir}")
 
-    def add_telemetry(self, telemetry: TelemetryData):
+    def add_telemetry(self, telemetry: FlightComputerTelemetryData):
         """
         Add telemetry packet to current session.
 

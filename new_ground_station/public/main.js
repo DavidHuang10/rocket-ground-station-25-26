@@ -20,14 +20,15 @@ createApp({
 
             // Data management
             config: null,
-            telemetryData: {},
-            sessionInfo: null,
-            packetCount: 0,
+            currentPage: 'rocket',  // Default page
+            pageData: {},           // Telemetry data per page: {rocket: {...}, payload: {...}}
+            sessionInfo: {},        // Session info per page
+            packetCount: {},        // Packet count per page
             
             // Buffering for race condition prevention: messages that arrive
             // before historical data loads are queued here
-            historicalDataLoaded: false,
-            messageBuffer: [],
+            historicalDataLoaded: {},
+            messageBuffer: {},
 
             // Manual stopwatch timer (separate from telemetry time)
             manualTimer: 0,
@@ -62,12 +63,22 @@ createApp({
         connectionText() {
             return this.connected ? 'Connected' : 'Disconnected';
         },
+        // Current page's telemetry data
+        telemetryData() {
+            return this.pageData[this.currentPage] || {};
+        },
         flightStage() {
             const stageData = this.telemetryData.stage;
             return stageData && stageData.length > 0 ? stageData[stageData.length - 1].value : 0;
         },
+        // Get current page's panels from config.pages
+        currentPageConfig() {
+            if (!this.config?.pages) return null;
+            return this.config.pages.find(p => p.id === this.currentPage);
+        },
         sortedPanels() {
-            return this.config ? [...this.config.panels].sort((a, b) => a.order - b.order) : [];
+            if (!this.currentPageConfig) return [];
+            return [...this.currentPageConfig.panels].sort((a, b) => a.order - b.order);
         }
     },
 
@@ -104,13 +115,30 @@ createApp({
         },
 
         initTelemetryData() {
-            // Build empty arrays for each field defined in config panels
-            const fields = new Set();
-            this.config.panels.forEach(panel => {
-                if (panel.fields) panel.fields.forEach(f => fields.add(f));
-                if (panel.items) panel.items.forEach(item => { if (item.field) fields.add(item.field); });
+            // Build empty arrays for each field per page
+            if (!this.config?.pages) return;
+            
+            this.config.pages.forEach(page => {
+                this.pageData[page.id] = {};
+                this.packetCount[page.id] = 0;
+                this.historicalDataLoaded[page.id] = false;
+                this.messageBuffer[page.id] = [];
+                
+                const fields = new Set();
+                page.panels.forEach(panel => {
+                    if (panel.fields) panel.fields.forEach(f => fields.add(f));
+                    if (panel.items) panel.items.forEach(item => { if (item.field) fields.add(item.field); });
+                });
+                fields.forEach(field => { this.pageData[page.id][field] = []; });
             });
-            fields.forEach(field => { this.telemetryData[field] = []; });
+        },
+        
+        switchPage(pageId) {
+            this.currentPage = pageId;
+            this.$nextTick(() => {
+                this.initCharts();
+                this.updateCharts();
+            });
         },
 
         /*
@@ -131,23 +159,38 @@ createApp({
             this.ws.onopen = async () => {
                 console.log('WebSocket connected');
                 this.connected = true;
-                this.historicalDataLoaded = false;
-                this.messageBuffer = [];
+                
+                // Reset per-page buffers
+                if (this.config?.pages) {
+                    this.config.pages.forEach(page => {
+                        this.historicalDataLoaded[page.id] = false;
+                        this.messageBuffer[page.id] = [];
+                    });
+                }
 
                 try {
                     await this.loadCurrentSession();
-                    this.historicalDataLoaded = true;
-
-                    // Drain buffered messages that arrived during load
-                    if (this.messageBuffer.length > 0) {
-                        console.log(`Processing ${this.messageBuffer.length} buffered messages`);
-                        this.messageBuffer.forEach(msg => this.processTelemetry(msg));
-                        this.messageBuffer = [];
+                    
+                    // Mark all pages as loaded and drain buffers
+                    if (this.config?.pages) {
+                        this.config.pages.forEach(page => {
+                            this.historicalDataLoaded[page.id] = true;
+                            const buffer = this.messageBuffer[page.id] || [];
+                            if (buffer.length > 0) {
+                                console.log(`Processing ${buffer.length} buffered messages for ${page.id}`);
+                                buffer.forEach(msg => this.processTelemetry(page.id, msg));
+                                this.messageBuffer[page.id] = [];
+                            }
+                        });
                     }
                     this.updateCharts();
                 } catch (e) {
                     console.error('Failed to load historical data:', e);
-                    this.historicalDataLoaded = true;
+                    if (this.config?.pages) {
+                        this.config.pages.forEach(page => {
+                            this.historicalDataLoaded[page.id] = true;
+                        });
+                    }
                 }
 
                 this.heartbeatInterval = setInterval(() => {
@@ -161,16 +204,20 @@ createApp({
                 try {
                     const message = JSON.parse(event.data);
 
+                    // Handle clear signal with page
                     if (message.type === 'clear') {
                         this.handleClearSignal(message);
                         return;
                     }
 
-                    if (Array.isArray(message)) {
-                        if (!this.historicalDataLoaded) {
-                            this.messageBuffer.push(message);
+                    // Handle page-tagged telemetry: {page: 'rocket', data: [...]}
+                    if (message.page && message.data) {
+                        const pageId = message.page;
+                        if (!this.historicalDataLoaded[pageId]) {
+                            this.messageBuffer[pageId] = this.messageBuffer[pageId] || [];
+                            this.messageBuffer[pageId].push(message.data);
                         } else {
-                            this.processTelemetry(message);
+                            this.processTelemetry(pageId, message.data);
                         }
                     }
                 } catch (e) {
@@ -201,56 +248,82 @@ createApp({
          * ============================================
          */
 
-        processTelemetry(telemetryArray) {
-            // Each packet is an array of {time, source, value} objects
-            this.packetCount++;
+        processTelemetry(pageId, telemetryArray) {
+            // Each packet is an array of {time, source, value} objects for a specific page
+            this.packetCount[pageId] = (this.packetCount[pageId] || 0) + 1;
+            const pageData = this.pageData[pageId];
+            if (!pageData) return;
+            
             for (const { time, source, value } of telemetryArray) {
-                if (this.telemetryData.hasOwnProperty(source)) {
-                    this.telemetryData[source].push({ time, value });
+                if (pageData.hasOwnProperty(source)) {
+                    pageData[source].push({ time, value });
                 }
             }
-            this.updateCharts();
+            
+            // Only update charts if this is the current page
+            if (pageId === this.currentPage) {
+                this.updateCharts();
+            }
         },
 
         async loadCurrentSession() {
-            console.log('Loading current session...');
+            console.log('Loading current session for all pages...');
             
-            // Clear existing data to prevent artifacts from mixing old and new data
-            for (const key in this.telemetryData) {
-                this.telemetryData[key] = [];
-            }
-            this.packetCount = 0;
+            if (!this.config?.pages) return;
             
-            const response = await fetch('/telemetry/current');
-            const result = await response.json();
-
-            let loaded = 0;
-            result.data.forEach(({ time, source, value }) => {
-                if (this.telemetryData.hasOwnProperty(source)) {
-                    this.telemetryData[source].push({ time, value });
-                    loaded++;
+            // Load data for each page
+            for (const page of this.config.pages) {
+                const pageId = page.id;
+                
+                // Clear existing data
+                for (const key in this.pageData[pageId]) {
+                    this.pageData[pageId][key] = [];
                 }
-            });
-
-            this.sessionInfo = result.session;
-            this.packetCount = result.session?.packet_count || 0;
-            console.log(`Loaded ${loaded} data points`);
-
+                this.packetCount[pageId] = 0;
+                
+                try {
+                    const response = await fetch(`/telemetry/current/${pageId}`);
+                    const result = await response.json();
+                    
+                    if (result.data) {
+                        let loaded = 0;
+                        result.data.forEach(({ time, source, value }) => {
+                            if (this.pageData[pageId].hasOwnProperty(source)) {
+                                this.pageData[pageId][source].push({ time, value });
+                                loaded++;
+                            }
+                        });
+                        
+                        this.sessionInfo[pageId] = result.session;
+                        this.packetCount[pageId] = result.session?.packet_count || 0;
+                        console.log(`Loaded ${loaded} data points for ${pageId}`);
+                    }
+                } catch (e) {
+                    console.error(`Failed to load session for ${pageId}:`, e);
+                }
+            }
+            
             this.$nextTick(() => this.updateCharts());
         },
 
         handleClearSignal(message) {
-            // Clear all chart data and reset packet count
-            for (const key in this.telemetryData) {
-                this.telemetryData[key] = [];
+            // Clear chart data for specific page
+            const pageId = message.page;
+            if (!pageId || !this.pageData[pageId]) return;
+            
+            for (const key in this.pageData[pageId]) {
+                this.pageData[pageId][key] = [];
             }
-            this.packetCount = 0;
-            this.updateCharts();
+            this.packetCount[pageId] = 0;
+            
+            if (pageId === this.currentPage) {
+                this.updateCharts();
+            }
 
             if (message.takeoff_offset !== null) {
-                console.log(`Takeoff! T+0 = ${message.takeoff_time}`);
+                console.log(`Takeoff for ${pageId}! T+0 = ${message.takeoff_time}`);
             } else {
-                console.log('Charts cleared for new session');
+                console.log(`Charts cleared for ${pageId}`);
             }
         },
 
@@ -261,7 +334,16 @@ createApp({
          */
 
         initCharts() {
-            this.config.panels.forEach(panel => {
+            // Destroy existing charts first
+            Object.values(this._charts).forEach(chart => {
+                if (chart) chart.destroy();
+            });
+            this._charts = {};
+            
+            // Create charts for current page panels only
+            if (!this.currentPageConfig) return;
+            
+            this.currentPageConfig.panels.forEach(panel => {
                 if (panel.type !== 'chart') return;
 
                 const ctx = document.getElementById(`chart-${panel.id}`);
@@ -285,7 +367,9 @@ createApp({
         },
 
         updateCharts() {
-            this.config.panels.forEach(panel => {
+            if (!this.currentPageConfig) return;
+            
+            this.currentPageConfig.panels.forEach(panel => {
                 const chart = this._charts[panel.id];
                 if (!chart) return;
 
@@ -297,7 +381,7 @@ createApp({
 
             // Keep modal chart in sync if open
             if (this.modalChart.visible && this.chartManager?.modalChart) {
-                const panel = this.config.panels.find(p => p.id === this.modalChart.panelId);
+                const panel = this.currentPageConfig.panels.find(p => p.id === this.modalChart.panelId);
                 if (panel) {
                     this.chartManager.updateModalChart(this.telemetryData, panel.fields[0]);
                     this.modalChart.currentValue = this.getCurrentValue(panel.fields[0]);
@@ -332,13 +416,13 @@ createApp({
          */
 
         async clearCharts() {
-            if (!confirm('Clear charts and mark takeoff?\n\nPre-flight data will be backed up.')) return;
+            if (!confirm(`Clear ${this.currentPage} charts and mark takeoff?\n\nPre-flight data will be backed up.`)) return;
 
             try {
-                const response = await fetch('/telemetry/clear', { method: 'POST' });
+                const response = await fetch(`/telemetry/clear/${this.currentPage}`, { method: 'POST' });
                 const result = await response.json();
                 if (result.status === 'success') {
-                    console.log('Takeoff marked, charts cleared');
+                    console.log(`${this.currentPage} takeoff marked, charts cleared`);
                 } else if (result.status === 'error') {
                     alert(result.message);
                 }
@@ -349,10 +433,10 @@ createApp({
 
         async saveFlight() {
             try {
-                const response = await fetch('/telemetry/save', { method: 'POST' });
+                const response = await fetch(`/telemetry/save/${this.currentPage}`, { method: 'POST' });
                 const result = await response.json();
                 if (result.status === 'success') {
-                    alert(`Flight saved as ${result.filename}`);
+                    alert(`${this.currentPage} flight saved as ${result.filename}`);
                     console.log('Flight saved:', result.filename);
                 }
             } catch (e) {
@@ -387,7 +471,7 @@ createApp({
         },
 
         getStageName(stage) {
-            const panel = this.config?.panels.find(p => p.id === 'flight_stage');
+            const panel = this.currentPageConfig?.panels.find(p => p.id === 'flight_stage' || p.id === 'destination_status');
             return panel?.mapping?.[stage] || stage.toString();
         },
 
@@ -411,7 +495,7 @@ createApp({
         },
 
         getTotalPackets() {
-            return this.packetCount;
+            return this.packetCount[this.currentPage] || 0;
         },
 
         /*

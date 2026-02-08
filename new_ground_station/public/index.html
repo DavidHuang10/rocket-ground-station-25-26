@@ -35,6 +35,16 @@
             </div>
         </div>
 
+        <!-- Page Tabs -->
+        <div class="page-tabs" v-if="config && config.pages">
+            <button v-for="page in config.pages" 
+                    :key="page.id"
+                    :class="['page-tab', {active: currentPage === page.id}]"
+                    @click="switchPage(page.id)">
+                {{ page.name }}
+            </button>
+        </div>
+
         <!-- Manual Timer -->
         <div class="manual-timer-container">
             <div class="manual-timer">
@@ -60,8 +70,9 @@
         </div>
 
         <div class="dashboard" v-if="config">
-            <!-- Dynamically render panels based on config -->
+            <!-- Dynamically render panels based on current page -->
             <template v-for="panel in sortedPanels" :key="panel.id">
+
 
                 <!-- Timer -->
                 <div v-if="panel.type === 'timer'" class="panel">

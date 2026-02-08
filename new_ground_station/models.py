@@ -5,7 +5,7 @@ from typing import Optional
 
 
 
-class TelemetryData(BaseModel):
+class FlightComputerTelemetryData(BaseModel):
     """
     ERIS Delta flight computer telemetry data model.
     Parses 29-field CSV format transmitted at 2Hz (500ms interval).
@@ -67,7 +67,7 @@ class TelemetryData(BaseModel):
         return v
 
     @classmethod
-    def from_csv(cls, csv_line: str) -> "TelemetryData":
+    def from_csv(cls, csv_line: str) -> "FlightComputerTelemetryData":
         """
         Parse CSV line into TelemetryData model.
 
@@ -122,7 +122,7 @@ class TelemetryData(BaseModel):
 
 
     @classmethod
-    def from_bitproto(cls, packet) -> "TelemetryData":
+    def from_bitproto(cls, packet) -> "FlightComputerTelemetryData":
         """
         Create TelemetryData from a Bitproto packet.
         
@@ -172,6 +172,78 @@ class TelemetryData(BaseModel):
 
     def get_gps_lat_degrees(self) -> float:
 
+        """Convert scaled GPS latitude to degrees."""
+        return self.gps_lat / 10_000_000.0
+
+    def get_gps_lng_degrees(self) -> float:
+        """Convert scaled GPS longitude to degrees."""
+        return self.gps_lng / 10_000_000.0
+
+    def get_gps_alt_meters(self) -> float:
+        """Convert GPS altitude from millimeters to meters."""
+        return self.gps_alt / 1000.0
+
+
+class PayloadTelemetryData(BaseModel):
+    """
+    Payload telemetry data model.
+    Contains subset of flight computer fields plus payload-specific fields.
+    """
+
+    # Time
+    cur_time: int = Field(..., description="Milliseconds since boot")
+
+    # GPS (shared with flight computer)
+    gps_lat: int = Field(..., description="Latitude in degrees × 10^7")
+    gps_lng: int = Field(..., description="Longitude in degrees × 10^7")
+    gps_alt: int = Field(..., description="GPS altitude in millimeters")
+
+    # Motion (subset of flight computer)
+    velocity: float = Field(..., description="Velocity (m/s)")
+    accel_x: float = Field(..., description="Acceleration X-axis (m/s²)")
+    accel_y: float = Field(..., description="Acceleration Y-axis (m/s²)")
+    accel_z: float = Field(..., description="Acceleration Z-axis (m/s²)")
+
+    # Payload-specific fields
+    distance_to_target: float = Field(..., description="Distance to target (meters)")
+    destination_reached: bool = Field(..., description="Whether destination has been reached")
+
+    @field_validator('gps_lat', 'gps_lng')
+    @classmethod
+    def validate_gps_coords(cls, v: int) -> int:
+        """Validate GPS coordinates are within valid range."""
+        if abs(v) > 1800000000:
+            raise ValueError(f"GPS coordinate out of range: {v}")
+        return v
+
+    @classmethod
+    def from_bitproto(cls, packet) -> "PayloadTelemetryData":
+        """
+        Create PayloadTelemetryData from a Bitproto packet.
+        
+        Args:
+            packet: payload_bp.PayloadPacket instance
+        """
+        import struct
+        
+        def uint32_to_float(val: int) -> float:
+            """Convert uint32 (IEEE 754 bits) back to float."""
+            return struct.unpack('<f', struct.pack('<I', val))[0]
+        
+        return cls(
+            cur_time=packet.cur_time,
+            gps_lat=packet.gps_lat,
+            gps_lng=packet.gps_lng,
+            gps_alt=packet.gps_alt,
+            velocity=uint32_to_float(packet.velocity),
+            accel_x=uint32_to_float(packet.accel_x),
+            accel_y=uint32_to_float(packet.accel_y),
+            accel_z=uint32_to_float(packet.accel_z),
+            distance_to_target=uint32_to_float(packet.distance_to_target),
+            destination_reached=packet.destination_reached
+        )
+
+    def get_gps_lat_degrees(self) -> float:
         """Convert scaled GPS latitude to degrees."""
         return self.gps_lat / 10_000_000.0
 
