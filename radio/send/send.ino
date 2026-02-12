@@ -24,7 +24,7 @@
 // ── Radio Configuration ──
 #define RF95_FREQ 915 // MHz — must match receive.ino
 
-#define DEBUG
+// #define DEBUG
 
 // ── Radio Driver ──
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
