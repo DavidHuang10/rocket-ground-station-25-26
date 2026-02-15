@@ -24,10 +24,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ── Command Uplink ──
-# ACK/NAK single-byte protocol: 0x00 = ACK, 0x01 = NAK
+# ACK/FAIL single-byte protocol: 0x00 = delivered, 0x01 = failed (not delivered)
 # These never collide with valid bitproto length bytes (89 for eris, 37 for payload).
 COMMAND_ACK_BYTE = 0x00
-COMMAND_NAK_BYTE = 0x01
+COMMAND_FAIL_BYTE = 0x01
 
 # Shared serial connections by page name, so the command endpoint can write to them
 serial_connections: Dict[str, serial.Serial] = {}
@@ -154,14 +154,14 @@ async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, b
                                     
                                 length = length_byte[0]  # Convert byte to int
                                 
-                                # Check for ACK/NAK command response
+                                # Check for command response
                                 if length == COMMAND_ACK_BYTE:
-                                    logger.info("Received ACK from eris transceiver")
+                                    logger.info("Command delivered to eris")
                                     await command_ack_queues["eris"].put("ack")
                                     continue
-                                elif length == COMMAND_NAK_BYTE:
-                                    logger.info("Received NAK from eris transceiver")
-                                    await command_ack_queues["eris"].put("nak")
+                                elif length == COMMAND_FAIL_BYTE:
+                                    logger.info("Command failed to deliver to eris")
+                                    await command_ack_queues["eris"].put("fail")
                                     continue
                                 
                                 # Validate length matches expected Bitproto packet size
@@ -255,14 +255,14 @@ async def payload_serial_producer(telemetry_queue: asyncio.Queue, port: str, bau
                                     
                                 length = length_byte[0]  # Convert byte to int
                                 
-                                # Check for ACK/NAK command response
+                                # Check for command response
                                 if length == COMMAND_ACK_BYTE:
-                                    logger.info("Received ACK from payload transceiver")
+                                    logger.info("Command delivered to payload")
                                     await command_ack_queues["payload"].put("ack")
                                     continue
-                                elif length == COMMAND_NAK_BYTE:
-                                    logger.info("Received NAK from payload transceiver")
-                                    await command_ack_queues["payload"].put("nak")
+                                elif length == COMMAND_FAIL_BYTE:
+                                    logger.info("Command failed to deliver to payload")
+                                    await command_ack_queues["payload"].put("fail")
                                     continue
                                 
                                 # Validate length matches expected Bitproto packet size

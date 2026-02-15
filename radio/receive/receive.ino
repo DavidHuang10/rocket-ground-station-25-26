@@ -1,20 +1,16 @@
 /*
  * Ground Station LoRa Receiver + Command Uplink
  *
- * Receives LoRa telemetry from the flight computer and forward
+ * Receives LoRa telemetry from the flight computer and forwards
  * over serial to the Python backend.
  *
- * Command uplink: When the Python backend sends a command string over serial,
- * this sketch transmits it over LoRa to the flight computer (send.ino), waits
- * for a 1-byte ACK/NAK LoRa response, and forwards that byte over serial.
+ * Command uplink: Uses RHReliableDatagram's sendtoWait() for automatic
+ * ACK + retries. Returns 0x00 (delivered) or 0x01 (failed) to Python.
  *
  * Pair with send.ino on the flight computer side.
- *
- * ACK/NAK protocol (over LoRa AND serial):
- *   0x00 = ACK (command recognized and executed)
- *   0x01 = NAK (unknown command)
  */
 
+#include <RHReliableDatagram.h>
 #include <RH_RF95.h>
 #include <SPI.h>
 
@@ -25,13 +21,17 @@
 
 #define RF95_FREQ 915
 
+// ── Addressing ──
+#define FLIGHT_COMPUTER_ADDR 1
+#define GROUND_STATION_ADDR 2
+
 // #define DEBUG
 
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
+RHReliableDatagram manager(rf95, GROUND_STATION_ADDR);
 
 #define CMD_ACK 0x00
-#define CMD_NAK 0x01
-#define CMD_ACK_TIMEOUT_MS 1500
+#define CMD_FAIL 0x01
 String cmdBuffer = "";
 
 void sendCommandOverLoRa(String cmd) {
@@ -39,39 +39,15 @@ void sendCommandOverLoRa(String cmd) {
   if (cmd.length() == 0)
     return;
 
-  // Transmit command string over LoRa
   uint8_t cmdBytes[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t cmdLen = min((int)cmd.length(), RH_RF95_MAX_MESSAGE_LEN - 1);
   cmd.getBytes(cmdBytes, cmdLen + 1);
 
-  rf95.send(cmdBytes, cmdLen);
-  rf95.waitPacketSent();
+  // sendtoWait: sends command, waits for ACK with automatic retries
+  bool delivered = manager.sendtoWait(cmdBytes, cmdLen, FLIGHT_COMPUTER_ADDR);
 
-#ifdef DEBUG
-  Serial.print("CMD TX: ");
-  Serial.println(cmd);
-#endif
-
-  // Wait for ACK/NAK response from flight computer
-  if (rf95.waitAvailableTimeout(CMD_ACK_TIMEOUT_MS)) {
-    uint8_t respBuf[RH_RF95_MAX_MESSAGE_LEN];
-    uint8_t respLen = sizeof(respBuf);
-
-    if (rf95.recv(respBuf, &respLen) && respLen >= 1) {
-      // Forward ACK/NAK byte to Python backend over serial
-      Serial.write(respBuf[0]);
-#ifdef DEBUG
-      Serial.print("CMD RESP: ");
-      Serial.println(respBuf[0] == CMD_ACK ? "ACK" : "NAK");
-#endif
-      return;
-    }
-  }
-
-  // Timeout — Python backend's own 2s timeout will handle this
-#ifdef DEBUG
-  Serial.println("CMD RESP: TIMEOUT");
-#endif
+  // Forward result to Python backend over serial
+  Serial.write(delivered ? CMD_ACK : CMD_FAIL);
 }
 
 void setup() {
@@ -94,7 +70,8 @@ void setup() {
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
 
-  while (!rf95.init()) {
+  // Initialize reliable datagram manager (calls rf95.init() internally)
+  while (!manager.init()) {
 #ifdef DEBUG
     Serial.println("LoRa radio init failed");
 #endif
@@ -121,17 +98,20 @@ void setup() {
 }
 
 void loop() {
-  if (rf95.available()) {
+  // Receive telemetry (broadcast packets from flight computer)
+  if (manager.available()) {
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     memset(buf, 0, RH_RF95_MAX_MESSAGE_LEN);
     uint8_t len = sizeof(buf);
+    uint8_t from;
 
-    if (rf95.recv(buf, &len)) {
+    if (manager.recvfromAck(buf, &len, &from)) {
       Serial.write(len);
       Serial.write((char *)buf, len);
     }
   }
 
+  // Check for commands from Python backend over serial
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\n') {
