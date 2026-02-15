@@ -23,7 +23,7 @@
 // ── Pin Definitions ──
 #define RFM95_CS 10
 #define RFM95_RST 9
-#define RFM95_INT 5
+#define RFM95_INT 24 // 5, 24
 #define LED 13
 
 // ── Radio Configuration ──
@@ -50,15 +50,9 @@ inline uint32_t floatToUint32(float val) {
 #define CMD_ACK 0x00
 #define CMD_NAK 0x01
 
-void blinkLED(int times) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(LED, HIGH);
-    delay(200);
-    digitalWrite(LED, LOW);
-    if (i < times - 1)
-      delay(200);
-  }
-}
+// Stateful telemetry fields that commands can toggle
+bool drogue_cont_1 = true;
+bool drogue_cont_2 = true;
 
 // Check for incoming LoRa command, execute it, and send ACK/NAK back over LoRa.
 void checkForLoRaCommand() {
@@ -84,10 +78,10 @@ void checkForLoRaCommand() {
   uint8_t response;
 
   if (cmd == "beep") {
-    blinkLED(1);
+    drogue_cont_1 = !drogue_cont_1;
     response = CMD_ACK;
   } else if (cmd == "beepbeep") {
-    blinkLED(2);
+    drogue_cont_2 = !drogue_cont_2;
     response = CMD_ACK;
   } else {
     response = CMD_NAK;
@@ -111,10 +105,9 @@ void setup() {
   digitalWrite(RFM95_RST, HIGH);
 
   Serial.begin(115200);
-  // while (!Serial)
-  //   ;
-  // delay(100);
-  delay(2000);
+  while (!Serial)
+    ;
+  delay(100);
 
 #ifdef DEBUG
   Serial.println("Eris LoRa TX — Flight Computer Simulator");
@@ -183,8 +176,8 @@ void loop() {
   message.airbrake_cont = true;
   message.ab_servo_pct = floatToUint32(45.0);
   message.cnrd_servo_pct = floatToUint32(0.0);
-  message.drogue_pyro_cont_1 = true;
-  message.drogue_pyro_cont_2 = true;
+  message.drogue_pyro_cont_1 = drogue_cont_1;
+  message.drogue_pyro_cont_2 = drogue_cont_2;
   message.main_pyro_cont_1 = false;
   message.main_pyro_cont_2 = false;
   message.flight_index = 0;
@@ -202,6 +195,9 @@ void loop() {
   // 4. Send over LoRa
   rf95.send(buffer, BYTES_LENGTH_TELEMETRY_PACKET);
   rf95.waitPacketSent();
+
+  // get ready to take it :o
+  rf95.available();
 
 #ifdef DEBUG
   Serial.print("TX t=");

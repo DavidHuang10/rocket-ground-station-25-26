@@ -18,29 +18,22 @@
 #include <RH_RF95.h>
 #include <SPI.h>
 
-// ── Pin Definitions ──
 #define RFM95_CS 10
 #define RFM95_RST 9
-#define RFM95_INT 5
+#define RFM95_INT 24 // 5, 24
 #define LED 13
 
-// ── Radio Configuration ──
 #define RF95_FREQ 915
 
-#define DEBUG
+// #define DEBUG
 
-// ── Radio Driver ──
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
-// ── Command Uplink ──
 #define CMD_ACK 0x00
 #define CMD_NAK 0x01
-#define CMD_ACK_TIMEOUT_MS                                                     \
-  1500 // How long to wait for LoRa ACK from flight computer
+#define CMD_ACK_TIMEOUT_MS 1500
 String cmdBuffer = "";
 
-// Send a command over LoRa and wait for ACK/NAK response.
-// Forwards the ACK/NAK byte (or nothing on timeout) to serial.
 void sendCommandOverLoRa(String cmd) {
   cmd.trim();
   if (cmd.length() == 0)
@@ -86,9 +79,9 @@ void setup() {
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
+  Serial.begin(115200);
   while (!Serial)
     ;
-  Serial.begin(115200);
   delay(100);
 
 #ifdef DEBUG
