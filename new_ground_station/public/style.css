@@ -292,6 +292,95 @@ button:active {
     transform: translateY(1px);
 }
 
+/* Command Bar */
+.command-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 24px;
+    border-top: 1px solid #2a2a2a;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.command-input-group {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    max-width: 500px;
+}
+
+.command-input {
+    flex: 1;
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.command-input:focus {
+    outline: none;
+    border-color: #4caf50;
+}
+
+.command-input:disabled {
+    opacity: 0.5;
+}
+
+.btn-send {
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.btn-send:hover:not(:disabled) {
+    background-color: #388e3c;
+}
+
+.btn-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.command-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.status-icon {
+    font-size: 14px;
+}
+
+.command-status.status-ack {
+    color: #81c784;
+}
+
+.command-status.status-nak {
+    color: #e57373;
+}
+
+.command-status.status-timeout {
+    color: #ffb74d;
+}
+
+.command-status.status-error {
+    color: #e57373;
+}
+
 /* Manual Timer */
 .manual-timer-container {
     display: flex;

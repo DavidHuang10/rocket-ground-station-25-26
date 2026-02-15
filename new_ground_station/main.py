@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
@@ -13,7 +14,8 @@ from utils import (
     mock_telemetry_producer, 
     mock_payload_producer,
     serial_telemetry_producer,
-    payload_serial_producer
+    payload_serial_producer,
+    send_command
 )
 from storage import StorageManager, PayloadStorageManager
 
@@ -113,6 +115,21 @@ async def websocket_endpoint(websocket: WebSocket):
                 message = await websocket.receive_text()
                 if message == "ping":
                     await websocket.send_text("pong")
+                else:
+                    # Try to parse as JSON command from frontend
+                    try:
+                        msg = json.loads(message)
+                        if msg.get("type") == "command" and msg.get("page") and msg.get("command"):
+                            result = await send_command(msg["page"], msg["command"])
+                            ack_msg = json.dumps({
+                                "type": "command_ack",
+                                "page": msg["page"],
+                                "command": msg["command"],
+                                **result
+                            })
+                            await broadcast_message(ack_msg)
+                    except (json.JSONDecodeError, Exception):
+                        pass
             except WebSocketDisconnect:
                 break
             except Exception as e:
@@ -228,6 +245,31 @@ async def broadcast_payload_telemetry():
 
         except Exception as e:
             logger.error(f"Error in payload broadcast loop: {e}")
+
+
+# ── Command Uplink ──
+
+class CommandRequest(BaseModel):
+    command: str
+
+@app.post("/command/{page}")
+async def send_command_endpoint(page: str, req: CommandRequest):
+    """Send a command to a transceiver and wait for ACK/NAK."""
+    if page not in ("eris", "payload"):
+        return {"status": "error", "message": f"Unknown page: {page}"}
+    
+    result = await send_command(page, req.command)
+    
+    # Broadcast result to all WebSocket clients
+    ack_msg = json.dumps({
+        "type": "command_ack",
+        "page": page,
+        "command": req.command,
+        **result
+    })
+    await broadcast_message(ack_msg)
+    
+    return result
 
 
 # Testing endpoint

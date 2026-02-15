@@ -45,7 +45,12 @@ createApp({
                 unit: '',
                 precision: 0,
                 currentValue: 0
-            }
+            },
+
+            // Command uplink state
+            commandInput: '',
+            commandSending: false,
+            commandStatus: null  // {status: 'ack'|'nak'|'timeout'|'error', command: '...', message: '...'}
         };
     },
 
@@ -79,6 +84,22 @@ createApp({
         sortedPanels() {
             if (!this.currentPageConfig) return [];
             return [...this.currentPageConfig.panels].sort((a, b) => a.order - b.order);
+        },
+        commandStatusIcon() {
+            if (!this.commandStatus) return '';
+            const icons = { ack: '✅', nak: '❌', timeout: '⏳', error: '⚠️' };
+            return icons[this.commandStatus.status] || '❓';
+        },
+        commandStatusText() {
+            if (!this.commandStatus) return '';
+            const s = this.commandStatus;
+            const texts = {
+                ack: `"${s.command}" acknowledged`,
+                nak: `"${s.command}" rejected (unknown command)`,
+                timeout: `"${s.command}" timed out (no response)`,
+                error: `"${s.command}" failed: ${s.message || 'unknown error'}`
+            };
+            return texts[s.status] || s.status;
         }
     },
 
@@ -207,6 +228,13 @@ createApp({
                     // Handle clear signal with page
                     if (message.type === 'clear') {
                         this.handleClearSignal(message);
+                        return;
+                    }
+
+                    // Handle command ACK/NAK
+                    if (message.type === 'command_ack') {
+                        this.commandStatus = message;
+                        this.commandSending = false;
                         return;
                     }
 
@@ -446,6 +474,39 @@ createApp({
                 }
             } catch (e) {
                 alert(`Failed to save flight: ${e.message}`);
+            }
+        },
+
+        /*
+         * ============================================
+         * COMMAND UPLINK
+         * 
+         * Send commands to the transceiver over serial.
+         * Each page has its own transceiver/serial connection.
+         * ============================================
+         */
+
+        async sendCommand() {
+            const cmd = this.commandInput.trim();
+            if (!cmd || this.commandSending) return;
+
+            this.commandSending = true;
+            this.commandStatus = null;
+
+            try {
+                const response = await fetch(`/command/${this.currentPage}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: cmd })
+                });
+                const result = await response.json();
+
+                this.commandStatus = { ...result, command: cmd };
+                this.commandSending = false;
+                this.commandInput = '';
+            } catch (e) {
+                this.commandStatus = { status: 'error', command: cmd, message: e.message };
+                this.commandSending = false;
             }
         },
 

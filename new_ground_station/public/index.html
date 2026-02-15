@@ -40,6 +40,28 @@
                     {{ page.name }}
                 </button>
             </div>
+
+            <!-- Command Uplink -->
+            <div class="command-bar">
+                <div class="command-input-group">
+                    <input 
+                        type="text" 
+                        v-model="commandInput"
+                        @keyup.enter="sendCommand"
+                        placeholder="Type command (e.g. beep, beepbeep)"
+                        class="command-input"
+                        :disabled="commandSending"
+                        id="command-input"
+                    />
+                    <button @click="sendCommand" class="btn-send" :disabled="commandSending || !commandInput.trim()">
+                        {{ commandSending ? 'Sending...' : 'Send' }}
+                    </button>
+                </div>
+                <div v-if="commandStatus" :class="['command-status', `status-${commandStatus.status}`]">
+                    <span class="status-icon">{{ commandStatusIcon }}</span>
+                    <span>{{ commandStatusText }}</span>
+                </div>
+            </div>
         </div>
 
         <!-- Manual Timer -->

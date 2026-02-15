@@ -4,6 +4,10 @@
  * Generates mock Eris telemetry, encodes it with Bitproto, and transmits
  * over LoRa RF95. Simulates what the real flight computer would send.
  *
+ * Command uplink: Between telemetry transmissions, checks for incoming
+ * LoRa command packets from the ground station (receive.ino). Recognized
+ * commands trigger LED blinks; sends ACK/NAK response back over LoRa.
+ *
  * Pair with receive.ino on the ground station side.
  *
  * REQUIRES:
@@ -20,6 +24,7 @@
 #define RFM95_CS 10
 #define RFM95_RST 9
 #define RFM95_INT 5
+#define LED 13
 
 // ── Radio Configuration ──
 #define RF95_FREQ 915 // MHz — must match receive.ino
@@ -41,14 +46,75 @@ inline uint32_t floatToUint32(float val) {
   return converter.u;
 }
 
+// ── Command Uplink ──
+#define CMD_ACK 0x00
+#define CMD_NAK 0x01
+
+void blinkLED(int times) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(LED, HIGH);
+    delay(200);
+    digitalWrite(LED, LOW);
+    if (i < times - 1)
+      delay(200);
+  }
+}
+
+// Check for incoming LoRa command, execute it, and send ACK/NAK back over LoRa.
+void checkForLoRaCommand() {
+  if (!rf95.available())
+    return;
+
+  uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+  uint8_t len = sizeof(buf);
+
+  if (!rf95.recv(buf, &len) || len == 0)
+    return;
+
+  // Telemetry packets are BYTES_LENGTH_TELEMETRY_PACKET (89) bytes.
+  // Commands are short ASCII strings (< 20 bytes). Use length to distinguish.
+  if (len == BYTES_LENGTH_TELEMETRY_PACKET)
+    return; // Not a command, ignore
+
+  // Parse command string
+  buf[len] = '\0'; // Null-terminate
+  String cmd = String((char *)buf);
+  cmd.trim();
+
+  uint8_t response;
+
+  if (cmd == "beep") {
+    blinkLED(1);
+    response = CMD_ACK;
+  } else if (cmd == "beepbeep") {
+    blinkLED(2);
+    response = CMD_ACK;
+  } else {
+    response = CMD_NAK;
+  }
+
+  // Send ACK/NAK back over LoRa
+  rf95.send(&response, 1);
+  rf95.waitPacketSent();
+
+#ifdef DEBUG
+  Serial.print("CMD RX: ");
+  Serial.print(cmd);
+  Serial.print(" -> ");
+  Serial.println(response == CMD_ACK ? "ACK" : "NAK");
+#endif
+}
+
 void setup() {
+  pinMode(LED, OUTPUT);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
   Serial.begin(115200);
-  while (!Serial)
-    ;
-  delay(100);
+  // while (!Serial)
+  //   ;
+  // delay(100);
+  delay(2000);
 
 #ifdef DEBUG
   Serial.println("Eris LoRa TX — Flight Computer Simulator");
@@ -87,7 +153,10 @@ void setup() {
 }
 
 void loop() {
-  // 1. Build mock telemetry packet
+  // 1. Check for incoming LoRa commands from ground station
+  checkForLoRaCommand();
+
+  // 2. Build mock telemetry packet
   struct TelemetryPacket message = {0};
   float t = millis() / 1000.0;
   message.cur_time = millis();
@@ -125,12 +194,12 @@ void loop() {
   message.battery_voltage = floatToUint32(battery_voltage);
   message.flight_stage = 2;
 
-  // 2. Encode with Bitproto
+  // 3. Encode with Bitproto
   uint8_t buffer[BYTES_LENGTH_TELEMETRY_PACKET];
   memset(buffer, 0, sizeof(buffer));
   EncodeTelemetryPacket(&message, buffer);
 
-  // 3. Send over LoRa
+  // 4. Send over LoRa
   rf95.send(buffer, BYTES_LENGTH_TELEMETRY_PACKET);
   rf95.waitPacketSent();
 
