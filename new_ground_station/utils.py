@@ -60,82 +60,126 @@ serial_connections: Dict[str, serial.Serial] = {}
 command_ack_queues: Dict[str, asyncio.Queue] = {}
 
 
-def format_for_frontend(telemetry: FlightComputerTelemetryData, takeoff_offset: Optional[float] = None) -> list:
-    """
-    Transform FlightComputerTelemetryData to frontend format.
+# ── Declarative field mappings: (frontend_name, attribute_or_callable) ──
 
-    Frontend expects: [{time, source, value}, ...]
-    where time is in seconds.
+ERIS_FIELDS = [
+    ("cur_time",        "cur_time"),
+    ("altitude",        "altitude"),
+    ("velocity",        "velocity"),
+    ("smooth_vel",      "smooth_vel"),
+    ("battery_voltage", "battery_voltage"),
+    ("accelx",          "accel_x"),
+    ("accely",          "accel_y"),
+    ("accelz",          "accel_z"),
+    ("gyrox",           "gyro_x"),
+    ("gyroy",           "gyro_y"),
+    ("gyroz",           "gyro_z"),
+    ("hg_accel",        "hg_accel"),
+    ("temp",            "temperature"),
+    ("pressure",        "pressure"),
+    ("lat",             "get_gps_lat_degrees"),
+    ("long",            "get_gps_lng_degrees"),
+    ("gps_alt",         "get_gps_alt_meters"),
+    ("stage",           "flight_stage"),
+    ("ab_servo",        "ab_servo_pct"),
+    ("cnrd_servo",      "cnrd_servo_pct"),
+    ("drogue_cont_1",   "drogue_pyro_cont_1"),
+    ("drogue_cont_2",   "drogue_pyro_cont_2"),
+    ("main_cont_1",     "main_pyro_cont_1"),
+    ("main_cont_2",     "main_pyro_cont_2"),
+    ("airbrake_cont",   "airbrake_cont"),
+    ("launchsite_msl",  "launchsite_msl"),
+    ("flight_index",    "flight_index"),
+    ("ellipse_on",      "ellipse_on"),
+    ("cameras_on",      "cameras_on"),
+]
 
-    Args:
-        telemetry: Telemetry data to format
-        takeoff_offset: Optional offset in seconds. If provided, time will be adjusted
-                        to flight time (T+0 = takeoff) instead of boot time.
-    """
-    time = telemetry.cur_time / 1000.0  # Convert ms to seconds
+PAYLOAD_FIELDS = [
+    ("cur_time",            "cur_time"),
+    ("lat",                 "get_gps_lat_degrees"),
+    ("long",                "get_gps_lng_degrees"),
+    ("gps_alt",             "get_gps_alt_meters"),
+    ("velocity",            "velocity"),
+    ("accelx",              "accel_x"),
+    ("accely",              "accel_y"),
+    ("accelz",              "accel_z"),
+    ("distance_to_target",  "distance_to_target"),
+    ("destination_reached", "destination_reached"),
+]
 
-    # Apply takeoff offset if set (convert to flight time)
+
+def _build_frontend_data(telemetry, fields, time):
+    """Build frontend data list from a declarative field mapping."""
+    result = []
+    for source_name, attr in fields:
+        val = getattr(telemetry, attr)
+        if callable(val):
+            val = val()
+        if isinstance(val, bool):
+            val = int(val)
+        result.append({"time": time, "source": source_name, "value": val})
+    return result
+
+
+def _compute_time(cur_time_ms, takeoff_offset):
+    """Convert millisecond boot time to seconds, applying optional takeoff offset."""
+    time = cur_time_ms / 1000.0
     if takeoff_offset is not None:
         time = time - takeoff_offset
+    return time
 
-    return [
-        {"time": time, "source": "cur_time", "value": telemetry.cur_time},
-        {"time": time, "source": "altitude", "value": telemetry.altitude},
-        {"time": time, "source": "velocity", "value": telemetry.velocity},
-        {"time": time, "source": "smooth_vel", "value": telemetry.smooth_vel},
-        {"time": time, "source": "battery_voltage", "value": telemetry.battery_voltage},
-        {"time": time, "source": "accelx", "value": telemetry.accel_x},
-        {"time": time, "source": "accely", "value": telemetry.accel_y},
-        {"time": time, "source": "accelz", "value": telemetry.accel_z},
-        {"time": time, "source": "gyrox", "value": telemetry.gyro_x},
-        {"time": time, "source": "gyroy", "value": telemetry.gyro_y},
-        {"time": time, "source": "gyroz", "value": telemetry.gyro_z},
-        {"time": time, "source": "hg_accel", "value": telemetry.hg_accel},
-        {"time": time, "source": "temp", "value": telemetry.temperature},
-        {"time": time, "source": "pressure", "value": telemetry.pressure},
-        {"time": time, "source": "lat", "value": telemetry.get_gps_lat_degrees()},
-        {"time": time, "source": "long", "value": telemetry.get_gps_lng_degrees()},
-        {"time": time, "source": "gps_alt", "value": telemetry.get_gps_alt_meters()},
-        {"time": time, "source": "stage", "value": telemetry.flight_stage},
-        {"time": time, "source": "ab_servo", "value": telemetry.ab_servo_pct},
-        {"time": time, "source": "cnrd_servo", "value": telemetry.cnrd_servo_pct},
-        {"time": time, "source": "drogue_cont_1", "value": int(telemetry.drogue_pyro_cont_1)},
-        {"time": time, "source": "drogue_cont_2", "value": int(telemetry.drogue_pyro_cont_2)},
-        {"time": time, "source": "main_cont_1", "value": int(telemetry.main_pyro_cont_1)},
-        {"time": time, "source": "main_cont_2", "value": int(telemetry.main_pyro_cont_2)},
-        {"time": time, "source": "airbrake_cont", "value": int(telemetry.airbrake_cont)},
-        {"time": time, "source": "launchsite_msl", "value": telemetry.launchsite_msl},
-        {"time": time, "source": "flight_index", "value": telemetry.flight_index},
-        {"time": time, "source": "ellipse_on", "value": int(telemetry.ellipse_on)},
-        {"time": time, "source": "cameras_on", "value": int(telemetry.cameras_on)},
-    ]
+
+def format_for_frontend(telemetry: FlightComputerTelemetryData, takeoff_offset: Optional[float] = None) -> list:
+    """Transform FlightComputerTelemetryData to frontend format."""
+    time = _compute_time(telemetry.cur_time, takeoff_offset)
+    return _build_frontend_data(telemetry, ERIS_FIELDS, time)
 
 
 def format_payload_for_frontend(telemetry: PayloadTelemetryData, takeoff_offset: Optional[float] = None) -> list:
+    """Transform PayloadTelemetryData to frontend format."""
+    time = _compute_time(telemetry.cur_time, takeoff_offset)
+    return _build_frontend_data(telemetry, PAYLOAD_FIELDS, time)
+
+
+async def _find_sync(ser, port_identity):
     """
-    Transform PayloadTelemetryData to frontend format.
-
-    Args:
-        telemetry: Payload telemetry data to format
-        takeoff_offset: Optional offset in seconds for time adjustment.
+    Slide bytes looking for the sync word (0xAA 0xBB).
+    Also handles single-byte ACK/NAK responses for command uplink.
+    Returns True if sync found, False if timed out.
     """
-    time = telemetry.cur_time / 1000.0
+    window = b''
+    while True:
+        b = ser.read(1)
+        if not b:
+            await asyncio.sleep(0.01)
+            return False
 
-    if takeoff_offset is not None:
-        time = time - takeoff_offset
+        # Handle single-byte Command ACK/NAK
+        if port_identity and b[0] in (COMMAND_ACK_BYTE, COMMAND_FAIL_BYTE):
+            status = "ack" if b[0] == COMMAND_ACK_BYTE else "fail"
+            label = "delivered" if status == "ack" else "failed to deliver"
+            logger.info(f"Command {label} to {port_identity}")
+            if port_identity in command_ack_queues:
+                await command_ack_queues[port_identity].put(status)
+            continue
 
-    return [
-        {"time": time, "source": "cur_time", "value": telemetry.cur_time},
-        {"time": time, "source": "lat", "value": telemetry.get_gps_lat_degrees()},
-        {"time": time, "source": "long", "value": telemetry.get_gps_lng_degrees()},
-        {"time": time, "source": "gps_alt", "value": telemetry.get_gps_alt_meters()},
-        {"time": time, "source": "velocity", "value": telemetry.velocity},
-        {"time": time, "source": "accelx", "value": telemetry.accel_x},
-        {"time": time, "source": "accely", "value": telemetry.accel_y},
-        {"time": time, "source": "accelz", "value": telemetry.accel_z},
-        {"time": time, "source": "distance_to_target", "value": telemetry.distance_to_target},
-        {"time": time, "source": "destination_reached", "value": int(telemetry.destination_reached)},
-    ]
+        window += b
+        if len(window) > 2:
+            window = window[1:]
+        if window == SYNC_WORD:
+            return True
+
+
+async def _read_payload(ser, expected_size):
+    """Read exactly expected_size bytes from serial, waiting as needed."""
+    payload = b""
+    while len(payload) < expected_size:
+        chunk = ser.read(expected_size - len(payload))
+        if chunk:
+            payload += chunk
+        else:
+            await asyncio.sleep(0.005)
+    return payload
 
 
 async def unified_serial_producer(port: str, baudrate: int = 115200):
@@ -147,7 +191,7 @@ async def unified_serial_producer(port: str, baudrate: int = 115200):
     if not TELEMETRY_SOURCES:
         logger.error("No Bitproto libraries available. Cannot decode serial telemetry.")
         return
-        
+
     logger.info(f"Starting UNIFIED serial producer on {port} @ {baudrate}")
 
     while True:
@@ -155,109 +199,67 @@ async def unified_serial_producer(port: str, baudrate: int = 115200):
             with serial.Serial(port, baudrate, timeout=0.1) as ser:
                 logger.info(f"Connected to unified port: {port}")
                 ser.reset_input_buffer()
-                
-                # We don't know the identity yet until we sync, but we map 
-                # the connection for command uplinks globally. (Assuming 1 telemetry 
-                # type per port predominantly, but we map on first received packet).
-                port_identity = None 
-                
+                port_identity = None
+
                 try:
                     while True:
                         try:
-                            # 1. Slide window to find Sync Word: \xAA\xBB
-                            if ser.in_waiting >= 1:
-                                window = b''
-                                while True:
-                                    b = ser.read(1)
-                                    if not b:
-                                        await asyncio.sleep(0.01)
-                                        break
-                                    
-                                    # Handle single-byte Command ACK/NAK from Command Uplink
-                                    if b[0] == COMMAND_ACK_BYTE and port_identity:
-                                        logger.info(f"Command delivered to {port_identity}")
-                                        if port_identity in command_ack_queues:
-                                            await command_ack_queues[port_identity].put("ack")
-                                        continue
-                                    elif b[0] == COMMAND_FAIL_BYTE and port_identity:
-                                        logger.info(f"Command failed to deliver to {port_identity}")
-                                        if port_identity in command_ack_queues:
-                                            await command_ack_queues[port_identity].put("fail")
-                                        continue
-
-                                    window += b
-                                    if len(window) > 2:
-                                        window = window[1:] # slide
-                                        
-                                    if window == SYNC_WORD:
-                                        break # Found!
-                            else:
+                            # Wait for data
+                            if ser.in_waiting < 1:
                                 await asyncio.sleep(0.01)
                                 continue
 
-                            # Re-check if we broke out due to timeout vs sync
-                            if window != SYNC_WORD:
+                            # 1. Find sync word
+                            if not await _find_sync(ser, port_identity):
                                 continue
 
-                            # 2. Sync found! Read the identity byte
-                            # Wait briefly if it hasn't arrived over UART yet
+                            # 2. Read identifier byte
                             while ser.in_waiting == 0:
                                 await asyncio.sleep(0.001)
-                                
                             identifier = ser.read(1)[0]
-                            
-                            # 3. Dynamic lookup!
+
+                            # 3. Look up source
                             source = TELEMETRY_SOURCES.get(identifier)
                             if not source:
                                 logger.warning(f"Unknown Sync ID: 0x{identifier:02X} on {port}")
-                                continue 
-                                
-                            expected_size = source["packet_class"].BYTES_LENGTH
+                                continue
+
                             name = source["name"]
-                            
-                            # Register this port for command uplinks if we haven't already
+
+                            # Register port for command uplinks
                             if port_identity != name:
                                 port_identity = name
                                 serial_connections[name] = ser
                                 command_ack_queues.setdefault(name, asyncio.Queue())
                                 logger.info(f"Port {port} dynamically registered as '{name}' for command uplinks")
 
-                            # 4. Read the exact length required for the payload
-                            payload = b""
-                            while len(payload) < expected_size:
-                                remaining = expected_size - len(payload)
-                                chunk = ser.read(remaining)
-                                if chunk:
-                                    payload += chunk
+                            # 4. Read payload
+                            expected_size = source["packet_class"].BYTES_LENGTH
+                            payload = await _read_payload(ser, expected_size)
+
+                            # 5. Decode and queue
+                            packet = source["packet_class"]()
+                            try:
+                                packet.decode(bytearray(payload))
+                                telemetry = source["data_model"].from_bitproto(packet)
+
+                                target_queue = global_telemetry_queues.get(source["queue_name"])
+                                if target_queue:
+                                    await target_queue.put(telemetry)
                                 else:
-                                    await asyncio.sleep(0.005)
-                            
-                            if len(payload) == expected_size:
-                                # 5. Decode Bitproto
-                                packet = source["packet_class"]()
-                                try:
-                                    packet.decode(bytearray(payload))
-                                    telemetry = source["data_model"].from_bitproto(packet)
-                                    
-                                    # Queue the telemetry
-                                    target_queue = global_telemetry_queues.get(source["queue_name"])
-                                    if target_queue:
-                                        await target_queue.put(telemetry)
-                                    else:
-                                        logger.warning(f"Target queue '{source['queue_name']}' not found in global_telemetry_queues")
-                                        
-                                    logger.debug(f"Received {name} packet on {port}")
-                                except Exception as e:
-                                    logger.warning(f"Failed to decode {name} packet on {port}: {e}")
-                                    
+                                    logger.warning(f"Target queue '{source['queue_name']}' not found")
+
+                                logger.debug(f"Received {name} packet on {port}")
+                            except Exception as e:
+                                logger.warning(f"Failed to decode {name} packet on {port}: {e}")
+
                         except (OSError, serial.SerialException) as e:
                             logger.error(f"Serial read error on {port}: {e}")
                             break
                 finally:
-                    # Unregister connection on disconnect
                     if port_identity:
                         serial_connections.pop(port_identity, None)
-                        
+
         except (OSError, serial.SerialException) as e:
             logger.error(f"Failed to connect to unified port {port}: {e}")
             logger.info(f"Retrying {port} in 2 seconds...")
@@ -310,62 +312,61 @@ async def send_command(page: str, command: str) -> dict:
 
 
 async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
-    """
-    Mock telemetry data producer for testing.
-
-    Generates sample CSV telemetry every 500ms.
-    Replace this with actual serial data reading in the future.
-    """
+    """Mock telemetry data producer. Generates FlightComputerTelemetryData every 500ms."""
     import math
     logger.info("Mock telemetry producer started")
 
     flight_time = 0
     while True:
-        # Simulate flight trajectory with time-varying values
-        t = flight_time / 1000.0  # Convert to seconds
+        t = flight_time / 1000.0
 
-        # Simulate altitude increase then decrease (parabolic trajectory)
         altitude = 10 + 50 * t - 2 * t**2
         velocity = 50 - 4 * t
         smooth_vel = velocity + math.sin(t) * 2
-
-        # Simulate IMU data with some variation
         accel_x = 15.2 + math.sin(t * 2) * 5
         accel_y = 0.3 + math.cos(t * 1.5) * 2
         accel_z = -9.8 + math.sin(t * 3) * 1
         gyro_x = 0.05 + math.sin(t) * 0.1
         gyro_y = -0.02 + math.cos(t * 1.2) * 0.08
         gyro_z = 0.1 + math.sin(t * 0.8) * 0.05
-
-        # Simulate servo positions
         ab_servo = 45.5 + math.sin(t * 0.5) * 30
         cnrd_servo = 12.3 + math.cos(t * 0.7) * 10
-
-        # Battery voltage slowly decreases
         battery = 12.6 - t * 0.01
-
-        # Temperature increases slightly
         temp = 22.5 + t * 0.1
 
-        # Generate mock CSV data
-        csv_data = (
-            f"{flight_time},"  # cur_time
-            "401234567,-1051234567,1523000,"  # GPS (lat, lng, alt)
-            f"{accel_x:.1f},{accel_y:.1f},{accel_z:.1f},"  # accel (x, y, z)
-            f"{gyro_x:.2f},{gyro_y:.2f},{gyro_z:.2f},"  # gyro (x, y, z)
-            "98.1,"  # hg_accel
-            f"{altitude:.1f},{velocity:.1f},{smooth_vel:.1f},"  # altitude, velocity, smooth_vel
-            f"1013.25,{temp:.1f},300.0,"  # pressure, temp, launchsite_msl
-            f"1,{ab_servo:.1f},{cnrd_servo:.1f},"  # airbrake_cont, ab_servo_pct, cnrd_servo_pct
-            "1,1,0,0,"  # drogue_cont_1, drogue_cont_2, main_cont_1, main_cont_2
-            "1,1,0,"  # flight_index, ellipse_on, cameras_on
-            f"{battery:.1f},2"  # battery_voltage, flight_stage
+        telemetry = FlightComputerTelemetryData(
+            cur_time=flight_time,
+            gps_lat=401234567,
+            gps_lng=-1051234567,
+            gps_alt=1523000,
+            accel_x=accel_x,
+            accel_y=accel_y,
+            accel_z=accel_z,
+            gyro_x=gyro_x,
+            gyro_y=gyro_y,
+            gyro_z=gyro_z,
+            hg_accel=98.1,
+            altitude=altitude,
+            velocity=velocity,
+            smooth_vel=smooth_vel,
+            pressure=1013.25,
+            temperature=temp,
+            launchsite_msl=300.0,
+            airbrake_cont=True,
+            ab_servo_pct=ab_servo,
+            cnrd_servo_pct=cnrd_servo,
+            drogue_pyro_cont_1=True,
+            drogue_pyro_cont_2=True,
+            main_pyro_cont_1=False,
+            main_pyro_cont_2=False,
+            flight_index=1,
+            ellipse_on=True,
+            cameras_on=False,
+            battery_voltage=battery,
+            flight_stage=2,
         )
 
-        # Put data in queue
-        await telemetry_queue.put(csv_data)
-
-        # Increment time and wait 500ms
+        await telemetry_queue.put(telemetry)
         flight_time += 500
         await asyncio.sleep(0.5)
 

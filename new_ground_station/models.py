@@ -1,7 +1,12 @@
 from pydantic import BaseModel, Field, field_validator
+import struct
 
 from typing import Optional
-# Forward declaration for type hinting if needed, but simple import inside method is safer to avoid circular deps if pb2 imports this
+
+
+def uint32_to_float(val: int) -> float:
+    """Convert uint32 (IEEE 754 bits) back to float."""
+    return struct.unpack('<f', struct.pack('<I', val))[0]
 
 
 
@@ -131,13 +136,6 @@ class FlightComputerTelemetryData(BaseModel):
         
         Note: Float fields are stored as uint32 (IEEE 754 bits) and must be converted.
         """
-        import struct
-        
-        def uint32_to_float(val: int) -> float:
-            """Convert uint32 (IEEE 754 bits) back to float."""
-            # Pack as unsigned 32-bit int, unpack as float
-            return struct.unpack('<f', struct.pack('<I', val))[0]
-        
         return cls(
             cur_time=packet.cur_time,
             gps_lat=packet.gps_lat,
@@ -224,12 +222,6 @@ class PayloadTelemetryData(BaseModel):
         Args:
             packet: payload_bp.PayloadPacket instance
         """
-        import struct
-        
-        def uint32_to_float(val: int) -> float:
-            """Convert uint32 (IEEE 754 bits) back to float."""
-            return struct.unpack('<f', struct.pack('<I', val))[0]
-        
         return cls(
             cur_time=packet.cur_time,
             gps_lat=packet.gps_lat,

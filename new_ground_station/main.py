@@ -7,7 +7,6 @@ from typing import Set, Dict
 import logging
 import json
 import os
-from models import FlightComputerTelemetryData, PayloadTelemetryData
 from utils import (
     format_for_frontend, 
     format_payload_for_frontend,
@@ -36,6 +35,8 @@ payload_queue: asyncio.Queue = asyncio.Queue()
 eris_storage = StorageManager(log_dir="flight_logs/eris")
 payload_storage = PayloadStorageManager(log_dir="flight_logs/payload")
 
+storage_managers = {"eris": eris_storage, "payload": payload_storage}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,8 +44,10 @@ async def lifespan(app: FastAPI):
     logger.info("Ground station server starting up...")
 
     # Start background broadcaster tasks (one per source)
-    eris_broadcaster = asyncio.create_task(broadcast_eris_telemetry())
-    payload_broadcaster = asyncio.create_task(broadcast_payload_telemetry())
+    eris_broadcaster = asyncio.create_task(
+        broadcast_telemetry("eris", eris_queue, eris_storage, format_for_frontend))
+    payload_broadcaster = asyncio.create_task(
+        broadcast_telemetry("payload", payload_queue, payload_storage, format_payload_for_frontend))
     
     producer_tasks = []
     
@@ -99,6 +102,23 @@ app = FastAPI(
 )
 
 
+async def _handle_ws_message(message: str):
+    """Handle a single WebSocket message (ping or JSON command)."""
+    if message == "ping":
+        return "pong"
+
+    msg = json.loads(message)
+    if msg.get("type") == "command" and msg.get("page") and msg.get("command"):
+        result = await send_command(msg["page"], msg["command"])
+        return json.dumps({
+            "type": "command_ack",
+            "page": msg["page"],
+            "command": msg["command"],
+            **result
+        })
+    return None
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for streaming telemetry data to frontend clients."""
@@ -110,29 +130,16 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             try:
                 message = await websocket.receive_text()
-                if message == "ping":
-                    await websocket.send_text("pong")
-                else:
-                    # Try to parse as JSON command from frontend
-                    try:
-                        msg = json.loads(message)
-                        if msg.get("type") == "command" and msg.get("page") and msg.get("command"):
-                            result = await send_command(msg["page"], msg["command"])
-                            ack_msg = json.dumps({
-                                "type": "command_ack",
-                                "page": msg["page"],
-                                "command": msg["command"],
-                                **result
-                            })
-                            await broadcast_message(ack_msg)
-                    except (json.JSONDecodeError, Exception):
-                        pass
+                response = await _handle_ws_message(message)
+                if response:
+                    await websocket.send_text(response)
+                    if response != "pong":
+                        await broadcast_message(response)
             except WebSocketDisconnect:
                 break
             except Exception as e:
                 logger.error(f"Error receiving WebSocket message: {e}")
                 break
-
     finally:
         connected_clients.discard(websocket)
         logger.info(f"WebSocket disconnected. Total clients: {len(connected_clients)}")
@@ -169,79 +176,21 @@ async def broadcast_clear_signal(page: str, takeoff_offset: float = None, takeof
     logger.info(f"Broadcasted clear signal for {page} (offset={takeoff_offset})")
 
 
-async def broadcast_eris_telemetry():
-    """Background task that processes Eris telemetry and broadcasts with page tag."""
-    logger.info("Eris telemetry broadcaster started")
-
+async def broadcast_telemetry(name, queue, storage, formatter):
+    """Background task that processes telemetry from a queue and broadcasts."""
+    logger.info(f"{name} telemetry broadcaster started")
     while True:
         try:
-            data = await eris_queue.get()
-
-            try:
-                if isinstance(data, str):
-                    telemetry = FlightComputerTelemetryData.from_csv(data)
-                elif isinstance(data, FlightComputerTelemetryData):
-                    telemetry = data
-                else:
-                    logger.warning(f"Unknown Eris data type: {type(data)}")
-                    eris_queue.task_done()
-                    continue
-            except (ValueError, Exception) as e:
-                logger.error(f"Failed to parse Eris telemetry: {e}")
-                eris_queue.task_done()
-                continue
-
-            eris_storage.add_telemetry(telemetry)
-
-            # Format with page tag
-            message_data = {
-                "page": "eris",
-                "data": format_for_frontend(telemetry, eris_storage.takeoff_offset_time)
-            }
-            message_json = json.dumps(message_data)
-
-            await broadcast_message(message_json)
-            eris_queue.task_done()
-
+            telemetry = await queue.get()
+            storage.add_telemetry(telemetry)
+            message = json.dumps({
+                "page": name,
+                "data": formatter(telemetry, storage.takeoff_offset_time)
+            })
+            await broadcast_message(message)
+            queue.task_done()
         except Exception as e:
-            logger.error(f"Error in Eris broadcast loop: {e}")
-
-
-async def broadcast_payload_telemetry():
-    """Background task that processes payload telemetry and broadcasts with page tag."""
-    logger.info("Payload telemetry broadcaster started")
-
-    while True:
-        try:
-            data = await payload_queue.get()
-
-            try:
-                if isinstance(data, PayloadTelemetryData):
-                    telemetry = data
-                else:
-                    logger.warning(f"Unknown payload data type: {type(data)}")
-                    payload_queue.task_done()
-                    continue
-            except (ValueError, Exception) as e:
-                logger.error(f"Failed to parse payload telemetry: {e}")
-                payload_queue.task_done()
-                continue
-
-            # Store payload telemetry (handles CSV writing and time tracking)
-            payload_storage.add_telemetry(telemetry)
-
-            # Format with page tag
-            message_data = {
-                "page": "payload",
-                "data": format_payload_for_frontend(telemetry, payload_storage.takeoff_offset_time)
-            }
-            message_json = json.dumps(message_data)
-
-            await broadcast_message(message_json)
-            payload_queue.task_done()
-
-        except Exception as e:
-            logger.error(f"Error in payload broadcast loop: {e}")
+            logger.error(f"Error in {name} broadcast loop: {e}")
 
 
 # ── Command Uplink ──
@@ -269,18 +218,6 @@ async def send_command_endpoint(page: str, req: CommandRequest):
     return result
 
 
-# Testing endpoint
-@app.post("/telemetry/inject")
-async def inject_telemetry(csv_data: str):
-    """Manual telemetry injection endpoint for testing (Eris only)."""
-    try:
-        FlightComputerTelemetryData.from_csv(csv_data)
-        await eris_queue.put(csv_data)
-        return {"status": "success", "message": "Telemetry queued"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring."""
@@ -295,51 +232,39 @@ async def health_check():
 @app.get("/telemetry/current/{page}")
 async def get_current_telemetry(page: str):
     """Get all telemetry from current session for a specific page."""
-    if page == "eris":
-        return {
-            "data": eris_storage.get_current_data(),
-            "session": eris_storage.get_session_info()
-        }
-    elif page == "payload":
-        return {
-            "data": payload_storage.get_current_data(),
-            "session": payload_storage.get_session_info()
-        }
-    else:
+    storage = storage_managers.get(page)
+    if not storage:
         return {"error": f"Unknown page: {page}"}
+    return {
+        "data": storage.get_current_data(),
+        "session": storage.get_session_info()
+    }
 
 
 @app.post("/telemetry/clear/{page}")
 async def clear_telemetry(page: str):
     """Clear charts and mark takeoff for a specific page."""
-    if page == "eris":
-        result = eris_storage.clear_data()
-    elif page == "payload":
-        result = payload_storage.clear_data()
-    else:
+    storage = storage_managers.get(page)
+    if not storage:
         return {"error": f"Unknown page: {page}"}
 
+    result = storage.clear_data()
     if result.get("status") == "success":
         await broadcast_clear_signal(
             page=page,
             takeoff_offset=result.get("takeoff_offset"),
             takeoff_time=result.get("takeoff_time")
         )
-
     return result
 
 
 @app.post("/telemetry/save/{page}")
 async def save_flight(page: str):
     """Archive current flight for a specific page."""
-    if page == "eris":
-        result = eris_storage.save_flight()
-    elif page == "payload":
-        result = payload_storage.save_flight()
-    else:
+    storage = storage_managers.get(page)
+    if not storage:
         return {"error": f"Unknown page: {page}"}
-    
-    return result
+    return storage.save_flight()
 
 
 # Mount static files last
