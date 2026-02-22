@@ -87,8 +87,7 @@ createApp({
         },
         commandStatusIcon() {
             if (!this.commandStatus) return '';
-            const icons = { ack: '✅', nak: '❌', timeout: '⏳', error: '⚠️' };
-            return icons[this.commandStatus.status] || '❓';
+            return '';
         },
         commandStatusText() {
             if (!this.commandStatus) return '';

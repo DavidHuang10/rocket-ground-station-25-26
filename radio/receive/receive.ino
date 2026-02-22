@@ -25,7 +25,7 @@
 #define FLIGHT_COMPUTER_ADDR 1
 #define GROUND_STATION_ADDR 2
 
-// #define DEBUG
+#define DEBUG
 
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 RHReliableDatagram manager(rf95, GROUND_STATION_ADDR);
@@ -43,10 +43,8 @@ void sendCommandOverLoRa(String cmd) {
   uint8_t cmdLen = min((int)cmd.length(), RH_RF95_MAX_MESSAGE_LEN - 1);
   cmd.getBytes(cmdBytes, cmdLen + 1);
 
-  // sendtoWait: sends command, waits for ACK with automatic retries
   bool delivered = manager.sendtoWait(cmdBytes, cmdLen, FLIGHT_COMPUTER_ADDR);
 
-  // Forward result to Python backend over serial
   Serial.write(delivered ? CMD_ACK : CMD_FAIL);
 }
 
@@ -98,14 +96,12 @@ void setup() {
 }
 
 void loop() {
-  // Receive telemetry (broadcast packets from flight computer)
-  if (manager.available()) {
+  // Receive telemetry (broadcast packets — use rf95 directly, not manager)
+  if (rf95.available()) {
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-    memset(buf, 0, RH_RF95_MAX_MESSAGE_LEN);
     uint8_t len = sizeof(buf);
-    uint8_t from;
 
-    if (manager.recvfromAck(buf, &len, &from)) {
+    if (rf95.recv(buf, &len)) {
       Serial.write(0xAA); // Sync Byte 1
       Serial.write(0xBB); // Sync Byte 2
       Serial.write(0x01); // Type ID (Eris = 0x01)

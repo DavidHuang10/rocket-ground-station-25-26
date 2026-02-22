@@ -33,7 +33,7 @@
 #define FLIGHT_COMPUTER_ADDR 1
 #define GROUND_STATION_ADDR 2
 
-// #define DEBUG
+#define DEBUG
 
 // ── Radio Driver + Reliable Datagram Manager ──
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -65,8 +65,8 @@ void setup() {
   digitalWrite(RFM95_RST, HIGH);
 
   Serial.begin(115200);
-  while (!Serial)
-    ;
+  // while (!Serial)
+  //   ;
   delay(100);
 
 #ifdef DEBUG
