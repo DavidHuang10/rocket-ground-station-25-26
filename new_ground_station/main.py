@@ -55,21 +55,31 @@ async def lifespan(app: FastAPI):
     global_telemetry_queues["eris"] = eris_queue
     global_telemetry_queues["payload"] = payload_queue
 
-    # Auto-discover all serial ports
-    ports = serial.tools.list_ports.comports()
-    active_ports = [p.device for p in ports if p.device]
-    
+    # Auto-discover serial ports with retry (handles Pi boot race condition)
+    active_ports = []
+    max_retries = 3
+    retry_delay = 3  # seconds
+
+    for attempt in range(1, max_retries + 1):
+        ports = serial.tools.list_ports.comports()
+        active_ports = [
+            p.device for p in ports
+            if p.device and "Bluetooth" not in p.device and "BTH" not in p.device
+        ]
+        if active_ports:
+            logger.info(f"Found serial ports on attempt {attempt}: {active_ports}")
+            break
+        logger.warning(f"No serial ports found (attempt {attempt}/{max_retries}), retrying in {retry_delay}s...")
+        await asyncio.sleep(retry_delay)
+
     if active_ports:
-        logger.info(f"Found serial ports: {active_ports}. Starting UNIFIED mode.")
+        logger.info(f"Starting UNIFIED mode with ports: {active_ports}")
         for port in active_ports:
-            # We don't want to auto-connect to Bluetooth incoming ports on Mac
-            if "Bluetooth" in port or "BTH" in port:
-                continue
             producer_tasks.append(asyncio.create_task(
                 unified_serial_producer(port)
             ))
     else:
-        logger.info("No serial ports found. Starting in MOCK mode for both.")
+        logger.info("No serial ports found after retries. Starting in MOCK mode for both.")
         producer_tasks.append(asyncio.create_task(mock_telemetry_producer(eris_queue)))
         producer_tasks.append(asyncio.create_task(mock_payload_producer(payload_queue)))
 
