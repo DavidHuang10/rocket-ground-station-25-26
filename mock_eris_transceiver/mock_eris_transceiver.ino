@@ -1,30 +1,31 @@
 /*
  * Mock Arduino Telemetry Transceiver
- * 
- * Demonstrates sending Bitproto telemetry over Serial with Length-Prefix framing.
- * Format: [Length (1 byte)] [Bitproto Payload (N bytes)]
- * 
+ *
+ * Demonstrates sending Bitproto telemetry over Serial with Length-Prefix
+ * framing. Format: [Length (1 byte)] [Bitproto Payload (N bytes)]
+ *
  * REQUIRES: Bitproto library (bitproto.h, bitproto.c)
  */
 
-#include "telemetry_bp.h"
 #include "bitproto.h"
+#include "telemetry_bp.h"
 
 // Helper to convert float to uint32 (preserves IEEE 754 bits)
 union FloatUint32 {
-    float f;
-    uint32_t u;
+  float f;
+  uint32_t u;
 };
 
 inline uint32_t floatToUint32(float val) {
-    union FloatUint32 converter;
-    converter.f = val;
-    return converter.u;
+  union FloatUint32 converter;
+  converter.f = val;
+  return converter.u;
 }
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial); 
+  while (!Serial)
+    ;
 }
 
 void loop() {
@@ -34,8 +35,8 @@ void loop() {
   // 2. Populate fields with DYNAMIC data
   float t = millis() / 1000.0; // Time in seconds
   message.cur_time = millis();
-  
-  message.gps_lat = 359940330; 
+
+  message.gps_lat = 359940330;
   message.gps_lng = -788986220;
   message.gps_alt = 150000;
 
@@ -62,20 +63,17 @@ void loop() {
   message.gyro_x = floatToUint32(0.01);
   message.gyro_y = floatToUint32(-0.02);
   message.gyro_z = floatToUint32(0.00);
-  
-  message.temp = floatToUint32(25.4);
+  x message.temp = floatToUint32(25.4);
   message.launchsite_msl = floatToUint32(30.0);
-  
-  // Boolean flags 
   message.airbrake_cont = true;
   message.ab_servo_pct = floatToUint32(45.0);
   message.cnrd_servo_pct = floatToUint32(0.0);
-  
+
   message.drogue_pyro_cont_1 = true;
   message.drogue_pyro_cont_2 = true;
   message.main_pyro_cont_1 = false;
   message.main_pyro_cont_2 = false;
-  
+
   message.flight_index = 0;
   message.ellipse_on = true;
 
@@ -92,14 +90,16 @@ void loop() {
   // BYTES_LENGTH_TELEMETRY_PACKET is defined in telemetry_bp.h (89 bytes)
   uint8_t buffer[BYTES_LENGTH_TELEMETRY_PACKET];
   memset(buffer, 0, sizeof(buffer));
-  
+
   int encoded_bytes = EncodeTelemetryPacket(&message, buffer);
 
-  // 4. Send Framed Packet: [Length Byte] + [Payload]
+  // 4. Send Framed Packet: [Sync1] [Sync2] [ID] + [Payload]
   // Note: Bitproto produces fixed-size output (BYTES_LENGTH_TELEMETRY_PACKET)
   uint8_t len = BYTES_LENGTH_TELEMETRY_PACKET;
-  Serial.write(len);                 // Send Length
-  Serial.write(buffer, len);         // Send Payload
-  
+  Serial.write(0xAA);        // Sync Byte 1
+  Serial.write(0xBB);        // Sync Byte 2
+  Serial.write(0x01);        // Type ID (Eris = 0x01)
+  Serial.write(buffer, len); // Send Payload
+
   delay(500);
 }

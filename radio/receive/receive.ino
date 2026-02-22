@@ -106,7 +106,9 @@ void loop() {
     uint8_t from;
 
     if (manager.recvfromAck(buf, &len, &from)) {
-      Serial.write(len);
+      Serial.write(0xAA); // Sync Byte 1
+      Serial.write(0xBB); // Sync Byte 2
+      Serial.write(0x01); // Type ID (Eris = 0x01)
       Serial.write((char *)buf, len);
     }
   }

@@ -20,6 +20,30 @@ except ImportError:
     payload_bp = None
     HAS_PAYLOAD_BITPROTO = False
 
+# Global Queues (passed in from main.py)
+global_telemetry_queues = {}
+
+# ── 3-Byte Synchronization Protocol Registry ──
+SYNC_WORD = b'\xAA\xBB'
+
+TELEMETRY_SOURCES = {}
+
+if HAS_ERIS_BITPROTO:
+    TELEMETRY_SOURCES[0x01] = {
+        "name": "eris",
+        "packet_class": telemetry_bp.TelemetryPacket,
+        "data_model": FlightComputerTelemetryData,
+        "queue_name": "eris"
+    }
+
+if HAS_PAYLOAD_BITPROTO:
+    TELEMETRY_SOURCES[0x02] = {
+        "name": "payload",
+        "packet_class": payload_bp.PayloadPacket,
+        "data_model": PayloadTelemetryData,
+        "queue_name": "payload"
+    }
+
 
 logger = logging.getLogger(__name__)
 
@@ -114,205 +138,132 @@ def format_payload_for_frontend(telemetry: PayloadTelemetryData, takeoff_offset:
     ]
 
 
-async def serial_telemetry_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
+async def unified_serial_producer(port: str, baudrate: int = 115200):
     """
-    Read telemetry from serial port (Teensy/LoRa) and put into queue.
-    Uses Bitproto + Length-Prefix framing.
-    Format: [Length Byte] [Bitproto Payload]
-    Also detects ACK (0x00) / NAK (0x01) bytes from command responses.
+    Read telemetry from an auto-discovered serial port.
+    Uses a 3-byte custom framing protocol: [0xAA] [0xBB] [Source ID] [Bitproto Payload]
+    Also maintains serial connection state for command uplink routing.
     """
-    if not HAS_ERIS_BITPROTO:
-        logger.error("Bitproto library not available. Cannot decode serial telemetry.")
+    if not TELEMETRY_SOURCES:
+        logger.error("No Bitproto libraries available. Cannot decode serial telemetry.")
         return
         
-    logger.info(f"Starting serial TELEMETRY (BITPROTO) producer on {port} @ {baudrate}")
-
-    # Expected packet size from Bitproto (defined in telemetry_bp.py)
-    EXPECTED_PACKET_SIZE = telemetry_bp.TelemetryPacket.BYTES_LENGTH
+    logger.info(f"Starting UNIFIED serial producer on {port} @ {baudrate}")
 
     while True:
         try:
-            # Open serial connection
             with serial.Serial(port, baudrate, timeout=0.1) as ser:
-                logger.info(f"Connected to {port}")
+                logger.info(f"Connected to unified port: {port}")
                 ser.reset_input_buffer()
                 
-                # Register connection for command uplink
-                serial_connections["eris"] = ser
-                command_ack_queues.setdefault("eris", asyncio.Queue())
-                logger.info("Eris serial connection registered for command uplink")
+                # We don't know the identity yet until we sync, but we map 
+                # the connection for command uplinks globally. (Assuming 1 telemetry 
+                # type per port predominantly, but we map on first received packet).
+                port_identity = None 
                 
                 try:
                     while True:
                         try:
-                            # 1. Read Length (1 byte) via blocking read with small timeout
-                            if ser.in_waiting > 0:
-                                length_byte = ser.read(1)
-                                if not length_byte:
-                                    await asyncio.sleep(0.01)
-                                    continue
+                            # 1. Slide window to find Sync Word: \xAA\xBB
+                            if ser.in_waiting >= 1:
+                                window = b''
+                                while True:
+                                    b = ser.read(1)
+                                    if not b:
+                                        await asyncio.sleep(0.01)
+                                        break
                                     
-                                length = length_byte[0]  # Convert byte to int
-                                
-                                # Check for command response
-                                if length == COMMAND_ACK_BYTE:
-                                    logger.info("Command delivered to eris")
-                                    await command_ack_queues["eris"].put("ack")
-                                    continue
-                                elif length == COMMAND_FAIL_BYTE:
-                                    logger.info("Command failed to deliver to eris")
-                                    await command_ack_queues["eris"].put("fail")
-                                    continue
-                                
-                                # Validate length matches expected Bitproto packet size
-                                if length != EXPECTED_PACKET_SIZE:
-                                    logger.warning(f"Unexpected packet size: {length}, expected {EXPECTED_PACKET_SIZE}")
-                                    # Skip bytes to try to resync
-                                    ser.read(length)
-                                    continue
-                                
-                                # 2. Read Payload (N bytes)
-                                payload = b""
-                                while len(payload) < length:
-                                    remaining = length - len(payload)
-                                    chunk = ser.read(remaining)
-                                    if chunk:
-                                        payload += chunk
-                                    else:
-                                        await asyncio.sleep(0.005)
-                                
-                                # 3. Decode Bitproto
-                                try:
-                                    packet = telemetry_bp.TelemetryPacket()
-                                    packet.decode(bytearray(payload))
-                                    
-                                    # 4. Convert to Model
-                                    telemetry = FlightComputerTelemetryData.from_bitproto(packet)
-                                    
-                                    logger.debug(f"Received bitproto packet: time={telemetry.cur_time}")
-                                    
-                                    # 5. Put in queue
-                                    await telemetry_queue.put(telemetry)
-                                    
-                                except Exception as e:
-                                    logger.warning(f"Error decoding bitproto: {e}")
+                                    # Handle single-byte Command ACK/NAK from Command Uplink
+                                    if b[0] == COMMAND_ACK_BYTE and port_identity:
+                                        logger.info(f"Command delivered to {port_identity}")
+                                        if port_identity in command_ack_queues:
+                                            await command_ack_queues[port_identity].put("ack")
+                                        continue
+                                    elif b[0] == COMMAND_FAIL_BYTE and port_identity:
+                                        logger.info(f"Command failed to deliver to {port_identity}")
+                                        if port_identity in command_ack_queues:
+                                            await command_ack_queues[port_identity].put("fail")
+                                        continue
+
+                                    window += b
+                                    if len(window) > 2:
+                                        window = window[1:] # slide
+                                        
+                                    if window == SYNC_WORD:
+                                        break # Found!
                             else:
                                 await asyncio.sleep(0.01)
+                                continue
 
+                            # Re-check if we broke out due to timeout vs sync
+                            if window != SYNC_WORD:
+                                continue
+
+                            # 2. Sync found! Read the identity byte
+                            # Wait briefly if it hasn't arrived over UART yet
+                            while ser.in_waiting == 0:
+                                await asyncio.sleep(0.001)
+                                
+                            identifier = ser.read(1)[0]
+                            
+                            # 3. Dynamic lookup!
+                            source = TELEMETRY_SOURCES.get(identifier)
+                            if not source:
+                                logger.warning(f"Unknown Sync ID: 0x{identifier:02X} on {port}")
+                                continue 
+                                
+                            expected_size = source["packet_class"].BYTES_LENGTH
+                            name = source["name"]
+                            
+                            # Register this port for command uplinks if we haven't already
+                            if port_identity != name:
+                                port_identity = name
+                                serial_connections[name] = ser
+                                command_ack_queues.setdefault(name, asyncio.Queue())
+                                logger.info(f"Port {port} dynamically registered as '{name}' for command uplinks")
+
+                            # 4. Read the exact length required for the payload
+                            payload = b""
+                            while len(payload) < expected_size:
+                                remaining = expected_size - len(payload)
+                                chunk = ser.read(remaining)
+                                if chunk:
+                                    payload += chunk
+                                else:
+                                    await asyncio.sleep(0.005)
+                            
+                            if len(payload) == expected_size:
+                                # 5. Decode Bitproto
+                                packet = source["packet_class"]()
+                                try:
+                                    packet.decode(bytearray(payload))
+                                    telemetry = source["data_model"].from_bitproto(packet)
+                                    
+                                    # Queue the telemetry
+                                    target_queue = global_telemetry_queues.get(source["queue_name"])
+                                    if target_queue:
+                                        await target_queue.put(telemetry)
+                                    else:
+                                        logger.warning(f"Target queue '{source['queue_name']}' not found in global_telemetry_queues")
+                                        
+                                    logger.debug(f"Received {name} packet on {port}")
+                                except Exception as e:
+                                    logger.warning(f"Failed to decode {name} packet on {port}: {e}")
+                                    
                         except (OSError, serial.SerialException) as e:
-                            logger.error(f"Serial read error: {e}")
+                            logger.error(f"Serial read error on {port}: {e}")
                             break
                 finally:
                     # Unregister connection on disconnect
-                    serial_connections.pop("eris", None)
+                    if port_identity:
+                        serial_connections.pop(port_identity, None)
                         
         except (OSError, serial.SerialException) as e:
-            logger.error(f"Failed to connect to {port}: {e}")
-            logger.info("Retrying in 2 seconds...")
+            logger.error(f"Failed to connect to unified port {port}: {e}")
+            logger.info(f"Retrying {port} in 2 seconds...")
             await asyncio.sleep(2)
         except Exception as e:
-            logger.error(f"Unexpected error in serial producer: {e}")
-            await asyncio.sleep(2)
-
-
-async def payload_serial_producer(telemetry_queue: asyncio.Queue, port: str, baudrate: int = 115200):
-    """
-    Read payload telemetry from serial port and put into queue.
-    Uses Bitproto + Length-Prefix framing.
-    Format: [Length Byte] [Bitproto Payload]
-    Also detects ACK (0x00) / NAK (0x01) bytes from command responses.
-    """
-    if not HAS_PAYLOAD_BITPROTO:
-        logger.error("Payload Bitproto library not available. Cannot decode payload telemetry.")
-        return
-        
-    logger.info(f"Starting serial PAYLOAD (BITPROTO) producer on {port} @ {baudrate}")
-
-    # Expected packet size from Bitproto (defined in payload_bp.py)
-    EXPECTED_PACKET_SIZE = payload_bp.PayloadPacket.BYTES_LENGTH
-
-    while True:
-        try:
-            # Open serial connection
-            with serial.Serial(port, baudrate, timeout=0.1) as ser:
-                logger.info(f"Connected to payload serial: {port}")
-                ser.reset_input_buffer()
-                
-                # Register connection for command uplink
-                serial_connections["payload"] = ser
-                command_ack_queues.setdefault("payload", asyncio.Queue())
-                logger.info("Payload serial connection registered for command uplink")
-                
-                try:
-                    while True:
-                        try:
-                            # 1. Read Length (1 byte) via blocking read with small timeout
-                            if ser.in_waiting > 0:
-                                length_byte = ser.read(1)
-                                if not length_byte:
-                                    await asyncio.sleep(0.01)
-                                    continue
-                                    
-                                length = length_byte[0]  # Convert byte to int
-                                
-                                # Check for command response
-                                if length == COMMAND_ACK_BYTE:
-                                    logger.info("Command delivered to payload")
-                                    await command_ack_queues["payload"].put("ack")
-                                    continue
-                                elif length == COMMAND_FAIL_BYTE:
-                                    logger.info("Command failed to deliver to payload")
-                                    await command_ack_queues["payload"].put("fail")
-                                    continue
-                                
-                                # Validate length matches expected Bitproto packet size
-                                if length != EXPECTED_PACKET_SIZE:
-                                    logger.warning(f"Unexpected payload packet size: {length}, expected {EXPECTED_PACKET_SIZE}")
-                                    # Skip bytes to try to resync
-                                    ser.read(length)
-                                    continue
-                                
-                                # 2. Read Payload (N bytes)
-                                payload = b""
-                                while len(payload) < length:
-                                    remaining = length - len(payload)
-                                    chunk = ser.read(remaining)
-                                    if chunk:
-                                        payload += chunk
-                                    else:
-                                        await asyncio.sleep(0.005)
-                                
-                                # 3. Decode Bitproto
-                                try:
-                                    packet = payload_bp.PayloadPacket()
-                                    packet.decode(bytearray(payload))
-                                    
-                                    # 4. Convert to Model
-                                    telemetry = PayloadTelemetryData.from_bitproto(packet)
-                                    
-                                    logger.debug(f"Received payload packet: time={telemetry.cur_time}")
-                                    
-                                    # 5. Put in queue
-                                    await telemetry_queue.put(telemetry)
-                                    
-                                except Exception as e:
-                                    logger.warning(f"Error decoding payload bitproto: {e}")
-                            else:
-                                await asyncio.sleep(0.01)
-
-                        except (OSError, serial.SerialException) as e:
-                            logger.error(f"Payload serial read error: {e}")
-                            break
-                finally:
-                    # Unregister connection on disconnect
-                    serial_connections.pop("payload", None)
-                        
-        except (OSError, serial.SerialException) as e:
-            logger.error(f"Failed to connect to payload serial {port}: {e}")
-            logger.info("Retrying in 2 seconds...")
-            await asyncio.sleep(2)
-        except Exception as e:
-            logger.error(f"Unexpected error in payload serial producer: {e}")
+            logger.error(f"Unexpected error in unified serial producer on {port}: {e}")
             await asyncio.sleep(2)
 
 

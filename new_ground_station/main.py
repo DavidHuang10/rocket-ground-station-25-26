@@ -13,10 +13,11 @@ from utils import (
     format_payload_for_frontend,
     mock_telemetry_producer, 
     mock_payload_producer,
-    serial_telemetry_producer,
-    payload_serial_producer,
+    unified_serial_producer,
+    global_telemetry_queues,
     send_command
 )
+import serial.tools.list_ports
 from storage import StorageManager, PayloadStorageManager
 
 logging.basicConfig(
@@ -47,31 +48,27 @@ async def lifespan(app: FastAPI):
     
     producer_tasks = []
     
-    # Check for eris serial port
-    eris_serial = os.environ.get("ERIS_SERIAL")
-    if eris_serial:
-        logger.info(f"Starting ERIS in REAL mode: {eris_serial}")
-        producer_tasks.append(asyncio.create_task(
-            serial_telemetry_producer(eris_queue, eris_serial)
-        ))
-    else:
-        logger.info("Starting ERIS in MOCK mode")
-        producer_tasks.append(asyncio.create_task(
-            mock_telemetry_producer(eris_queue)
-        ))
+    # Register queues for the unified parser
+    global_telemetry_queues["eris"] = eris_queue
+    global_telemetry_queues["payload"] = payload_queue
+
+    # Auto-discover all serial ports
+    ports = serial.tools.list_ports.comports()
+    active_ports = [p.device for p in ports if p.device]
     
-    # Check for payload serial port
-    payload_serial = os.environ.get("PAYLOAD_SERIAL")
-    if payload_serial:
-        logger.info(f"Starting PAYLOAD in REAL mode: {payload_serial}")
-        producer_tasks.append(asyncio.create_task(
-            payload_serial_producer(payload_queue, payload_serial)
-        ))
+    if active_ports:
+        logger.info(f"Found serial ports: {active_ports}. Starting UNIFIED mode.")
+        for port in active_ports:
+            # We don't want to auto-connect to Bluetooth incoming ports on Mac
+            if "Bluetooth" in port or "BTH" in port:
+                continue
+            producer_tasks.append(asyncio.create_task(
+                unified_serial_producer(port)
+            ))
     else:
-        logger.info("Starting PAYLOAD in MOCK mode")
-        producer_tasks.append(asyncio.create_task(
-            mock_payload_producer(payload_queue)
-        ))
+        logger.info("No serial ports found. Starting in MOCK mode for both.")
+        producer_tasks.append(asyncio.create_task(mock_telemetry_producer(eris_queue)))
+        producer_tasks.append(asyncio.create_task(mock_payload_producer(payload_queue)))
 
     logger.info("Background tasks started")
 

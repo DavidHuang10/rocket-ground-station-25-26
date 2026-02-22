@@ -1,30 +1,31 @@
 /*
  * Mock Payload Telemetry Transceiver
- * 
- * Demonstrates sending Bitproto payload telemetry over Serial with Length-Prefix framing.
- * Format: [Length (1 byte)] [Bitproto Payload (N bytes)]
- * 
+ *
+ * Demonstrates sending Bitproto payload telemetry over Serial with
+ * Length-Prefix framing. Format: [Length (1 byte)] [Bitproto Payload (N bytes)]
+ *
  * REQUIRES: Bitproto library (bitproto.h, bitproto.c)
  */
 
-#include "payload_bp.h"
 #include "bitproto.h"
+#include "payload_bp.h"
 
 // Helper to convert float to uint32 (preserves IEEE 754 bits)
 union FloatUint32 {
-    float f;
-    uint32_t u;
+  float f;
+  uint32_t u;
 };
 
 inline uint32_t floatToUint32(float val) {
-    union FloatUint32 converter;
-    converter.f = val;
-    return converter.u;
+  union FloatUint32 converter;
+  converter.f = val;
+  return converter.u;
 }
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial); 
+  while (!Serial)
+    ;
 }
 
 void loop() {
@@ -34,11 +35,11 @@ void loop() {
   // 2. Populate fields with DYNAMIC data
   float t = millis() / 1000.0; // Time in seconds
   message.cur_time = millis();
-  
+
   // GPS coordinates (Duke University area, slight drift)
   message.gps_lat = 359940330 + (long)(sin(t * 0.1) * 100);
   message.gps_lng = -788986220 + (long)(cos(t * 0.1) * 100);
-  message.gps_alt = 150000 + (long)(sin(t * 0.2) * 5000);  // 145-155m
+  message.gps_alt = 150000 + (long)(sin(t * 0.2) * 5000); // 145-155m
 
   // DYNAMIC 1: Velocity (Sine Wave 0-10 m/s)
   float velocity = 5.0 + 5.0 * sin(t * 0.3);
@@ -54,7 +55,7 @@ void loop() {
 
   // DYNAMIC 3: Distance to Target (decreasing over time, simulating approach)
   // Starts at 1000m and decreases, then resets
-  float distance_cycle = fmod(t, 100.0);  // 100 second cycle
+  float distance_cycle = fmod(t, 100.0); // 100 second cycle
   float distance_to_target = max(0.0f, 1000.0f - (distance_cycle * 10.0f));
   message.distance_to_target = floatToUint32(distance_to_target);
 
@@ -65,13 +66,15 @@ void loop() {
   // BYTES_LENGTH_PAYLOAD_PACKET is defined in payload_bp.h (37 bytes)
   uint8_t buffer[BYTES_LENGTH_PAYLOAD_PACKET];
   memset(buffer, 0, sizeof(buffer));
-  
+
   int encoded_bytes = EncodePayloadPacket(&message, buffer);
 
-  // 4. Send Framed Packet: [Length Byte] + [Payload]
+  // 4. Send Framed Packet: [Sync1] [Sync2] [ID] + [Payload]
   uint8_t len = BYTES_LENGTH_PAYLOAD_PACKET;
-  Serial.write(len);                 // Send Length
-  Serial.write(buffer, len);         // Send Payload
-  
+  Serial.write(0xAA);        // Sync Byte 1
+  Serial.write(0xBB);        // Sync Byte 2
+  Serial.write(0x02);        // Type ID (Payload = 0x02)
+  Serial.write(buffer, len); // Send Payload
+
   delay(500);
 }
