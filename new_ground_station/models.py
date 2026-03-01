@@ -1,185 +1,137 @@
 from pydantic import BaseModel, Field, field_validator
-import struct
 
 from typing import Optional
-
-
-def uint32_to_float(val: int) -> float:
-    """Convert uint32 (IEEE 754 bits) back to float."""
-    return struct.unpack('<f', struct.pack('<I', val))[0]
-
 
 
 class FlightComputerTelemetryData(BaseModel):
     """
     ERIS Delta flight computer telemetry data model.
-    Parses 29-field CSV format transmitted at 2Hz (500ms interval).
+    Decodes FlightStatus bitproto packets (telemetry_bp.FlightStatus).
+    All values are stored in human units after conversion from the wire format.
     """
 
-    # Time and position
-    cur_time: int = Field(..., description="Milliseconds since boot")
-    gps_lat: int = Field(..., description="Latitude in degrees × 10^7")
-    gps_lng: int = Field(..., description="Longitude in degrees × 10^7")
-    gps_alt: int = Field(..., description="GPS altitude in millimeters")
+    # Time
+    cur_time: int = Field(..., description="Milliseconds since launch")
 
-    # IMU - Accelerometer (m/s²)
-    accel_x: float = Field(..., description="Acceleration X-axis (m/s²)")
-    accel_y: float = Field(..., description="Acceleration Y-axis (m/s²)")
-    accel_z: float = Field(..., description="Acceleration Z-axis (m/s²)")
+    # GPS
+    gps_lat: int = Field(..., description="Latitude in microdegrees (×10^6)")
+    gps_lng: int = Field(..., description="Longitude in microdegrees (×10^6)")
+    gps_alt: int = Field(..., description="GPS altitude in meters MSL")
+    gps_sats_in_view: int = Field(..., description="GPS satellites in view")
+    gps_fix_status: int = Field(
+        ..., description="GPS fix status (0=no fix, 2=2D, 3=3D, 4=GNSS+DR)"
+    )
 
-    # IMU - Gyroscope (rad/s)
-    gyro_x: float = Field(..., description="Gyroscope X-axis (rad/s)")
-    gyro_y: float = Field(..., description="Gyroscope Y-axis (rad/s)")
-    gyro_z: float = Field(..., description="Gyroscope Z-axis (rad/s)")
+    # Altitude and motion
+    altitude: float = Field(..., description="Altitude MSL (meters)")
+    velocity: float = Field(..., description="Velocity (m/s, from kalman)")
+    acceleration: float = Field(..., description="Acceleration (m/s², from kalman)")
+    vertical_velocity: float = Field(..., description="Fused vertical velocity (m/s)")
 
-    # High-G accelerometer
-    hg_accel: float = Field(..., description="High-G accelerometer (m/s²)")
+    # Control surfaces (0-100%)
+    airbrake_deploy_pct: int = Field(..., description="Airbrake deployment percentage")
+    canard_angle_pct: int = Field(..., description="Canard angle percentage")
 
-    # Altimeter data
-    altitude: float = Field(..., description="Altitude AGL (meters)")
-    velocity: float = Field(..., description="Vertical velocity (m/s)")
-    smooth_vel: float = Field(..., description="Smoothed velocity (m/s)")
-    pressure: float = Field(..., description="Barometric pressure (hPa)")
+    # Power
+    battery_voltage: float = Field(..., description="Battery voltage (V)")
+
+    # Environment
     temperature: float = Field(..., description="Temperature (°C)")
-    launchsite_msl: float = Field(..., description="Launch site MSL altitude (m)")
 
-    # Airbrake system
-    airbrake_cont: bool = Field(..., description="Airbrake continuity")
-    ab_servo_pct: float = Field(..., description="Airbrake servo position (%)")
-    cnrd_servo_pct: float = Field(..., description="Canard servo position (%)")
+    # Cameras
+    runcam_active: bool = Field(..., description="Runcam active")
+    runcam_overcurrent: bool = Field(..., description="Runcam overcurrent")
+    livecam_active: bool = Field(..., description="Live camera active")
+    livecam_overcurrent: bool = Field(..., description="Live camera overcurrent")
 
     # Pyrotechnic continuity
-    drogue_pyro_cont_1: bool = Field(..., description="Drogue pyro channel 1 continuity")
-    drogue_pyro_cont_2: bool = Field(..., description="Drogue pyro channel 2 continuity")
+    drogue_pyro_cont_1: bool = Field(
+        ..., description="Drogue pyro channel 1 continuity"
+    )
+    drogue_pyro_cont_2: bool = Field(
+        ..., description="Drogue pyro channel 2 continuity"
+    )
     main_pyro_cont_1: bool = Field(..., description="Main pyro channel 1 continuity")
     main_pyro_cont_2: bool = Field(..., description="Main pyro channel 2 continuity")
 
-    # Flight metadata
-    flight_index: int = Field(..., description="Flight index number")
-    ellipse_on: bool = Field(..., description="Ellipse system status")
-    cameras_on: bool = Field(..., description="Camera system status")
-    battery_voltage: float = Field(..., description="Battery voltage (V)")
-    flight_stage: int = Field(..., ge=0, le=6, description="Flight stage (0-6)")
+    # Sensor health
+    bmp1_ok: bool = Field(..., description="BMP1 barometer OK")
+    bmp2_ok: bool = Field(..., description="BMP2 barometer OK")
+    ext_barometer_ok: bool = Field(..., description="External barometer OK")
+    bno_ok: bool = Field(..., description="BNO IMU OK")
+    high_g_ok: bool = Field(..., description="High-G accelerometer OK")
+    exernal_imu_ok: bool = Field(..., description="External IMU OK")
 
-    @field_validator('gps_lat', 'gps_lng')
+    # Filtered IMU
+    roll: float = Field(..., description="Filtered roll rate (rad/s)")
+
+    @field_validator("gps_lat", "gps_lng")
     @classmethod
     def validate_gps_coords(cls, v: int) -> int:
-        """Validate GPS coordinates are within valid range (before scaling)."""
-        # Latitude: -90 to 90 degrees × 10^7 = -900000000 to 900000000
-        # Longitude: -180 to 180 degrees × 10^7 = -1800000000 to 1800000000
-        if abs(v) > 1800000000:
+        """Validate GPS coordinates are within valid range."""
+        # Microdegrees: lat ±90_000_000, lng ±180_000_000
+        if abs(v) > 180_000_000:
             raise ValueError(f"GPS coordinate out of range: {v}")
         return v
 
     @classmethod
-    def from_csv(cls, csv_line: str) -> "FlightComputerTelemetryData":
-        """
-        Parse CSV line into TelemetryData model.
-
-        Args:
-            csv_line: Comma-separated string with 29 fields
-
-        Returns:
-            TelemetryData instance
-
-        Raises:
-            ValueError: If field count is incorrect or parsing fails
-            pydantic.ValidationError: If data validation fails
-        """
-        fields = csv_line.strip().split(',')
-        if len(fields) != 29:
-            raise ValueError(f"Expected 29 fields, got {len(fields)}")
-
-        try:
-            return cls(
-                cur_time=int(fields[0]),
-                gps_lat=int(fields[1]),
-                gps_lng=int(fields[2]),
-                gps_alt=int(fields[3]),
-                accel_x=float(fields[4]),
-                accel_y=float(fields[5]),
-                accel_z=float(fields[6]),
-                gyro_x=float(fields[7]),
-                gyro_y=float(fields[8]),
-                gyro_z=float(fields[9]),
-                hg_accel=float(fields[10]),
-                altitude=float(fields[11]),
-                velocity=float(fields[12]),
-                smooth_vel=float(fields[13]),
-                pressure=float(fields[14]),
-                temperature=float(fields[15]),
-                launchsite_msl=float(fields[16]),
-                airbrake_cont=bool(int(fields[17])),
-                ab_servo_pct=float(fields[18]),
-                cnrd_servo_pct=float(fields[19]),
-                drogue_pyro_cont_1=bool(int(fields[20])),
-                drogue_pyro_cont_2=bool(int(fields[21])),
-                main_pyro_cont_1=bool(int(fields[22])),
-                main_pyro_cont_2=bool(int(fields[23])),
-                flight_index=int(fields[24]),
-                ellipse_on=bool(int(fields[25])),
-                cameras_on=bool(int(fields[26])),
-                battery_voltage=float(fields[27]),
-                flight_stage=int(fields[28])
-            )
-        except (ValueError, IndexError) as e:
-            raise ValueError(f"Failed to parse CSV: {e}") from e
-
-
-    @classmethod
     def from_bitproto(cls, packet) -> "FlightComputerTelemetryData":
         """
-        Create TelemetryData from a Bitproto packet.
-        
-        Args:
-            packet: telemetry_bp.TelemetryPacket instance
-        
-        Note: Float fields are stored as uint32 (IEEE 754 bits) and must be converted.
+        Create FlightComputerTelemetryData from a telemetry_bp.FlightStatus packet.
+
+        Wire format conversions applied here:
+          - altitude_msl_m / gps_altitude_msl_m: uint16 offset by +500 → subtract 500
+          - velocity_mm_s: int20 in mm/s → divide by 1000 for m/s
+          - acceleration_mss: int16 in cm/s² → divide by 100 for m/s²
+          - vertical_velocity_cms: int32 in cm/s → divide by 100 for m/s
+          - temperature_celsius: uint8, stored as round(°C × 2) → divide by 2
+          - battery_voltage_mv: uint16 in mV → divide by 1000 for V
+          - roll_filt: int16, rad/s × 100 → divide by 100
+          - GPS: microdegrees (×10^6)
         """
         return cls(
-            cur_time=packet.cur_time,
-            gps_lat=packet.gps_lat,
-            gps_lng=packet.gps_lng,
-            gps_alt=packet.gps_alt,
-            accel_x=uint32_to_float(packet.accel_x),
-            accel_y=uint32_to_float(packet.accel_y),
-            accel_z=uint32_to_float(packet.accel_z),
-            gyro_x=uint32_to_float(packet.gyro_x),
-            gyro_y=uint32_to_float(packet.gyro_y),
-            gyro_z=uint32_to_float(packet.gyro_z),
-            hg_accel=uint32_to_float(packet.hg_accel),
-            altitude=uint32_to_float(packet.alt_baro),
-            velocity=uint32_to_float(packet.vel_vertical),
-            smooth_vel=uint32_to_float(packet.smooth_vel),
-            pressure=uint32_to_float(packet.press),
-            temperature=uint32_to_float(packet.temp),
-            launchsite_msl=uint32_to_float(packet.launchsite_msl),
-            airbrake_cont=packet.airbrake_cont,
-            ab_servo_pct=uint32_to_float(packet.ab_servo_pct),
-            cnrd_servo_pct=uint32_to_float(packet.cnrd_servo_pct),
+            cur_time=packet.timestamp_ms,
+            gps_lat=packet.gps_lat_microdeg,
+            gps_lng=packet.gps_lng_microdeg,
+            gps_alt=packet.gps_altitude_msl_m - 500,
+            gps_sats_in_view=packet.gps_sats_in_view,
+            gps_fix_status=packet.gps_fix_status,
+            altitude=float(packet.altitude_msl_m - 500),
+            velocity=packet.velocity_mm_s / 1000.0,
+            acceleration=packet.acceleration_mss / 100.0,
+            vertical_velocity=packet.vertical_velocity_cms / 100.0,
+            airbrake_deploy_pct=packet.airbrake_deploy_pct,
+            canard_angle_pct=packet.canard_angle_pct,
+            battery_voltage=packet.battery_voltage_mv / 1000.0,
+            temperature=packet.temperature_celsius / 4.0,
+            runcam_active=packet.runcam_active,
+            runcam_overcurrent=packet.runcam_overcurrent,
+            livecam_active=packet.livecam_active,
+            livecam_overcurrent=packet.livecam_overcurrent,
             drogue_pyro_cont_1=packet.drogue_pyro_cont_1,
             drogue_pyro_cont_2=packet.drogue_pyro_cont_2,
             main_pyro_cont_1=packet.main_pyro_cont_1,
             main_pyro_cont_2=packet.main_pyro_cont_2,
-            flight_index=packet.flight_index,
-            ellipse_on=packet.ellipse_on,
-            cameras_on=packet.cameras_on,
-            battery_voltage=uint32_to_float(packet.battery_voltage),
-            flight_stage=packet.flight_stage
+            bmp1_ok=packet.bmp1_ok,
+            bmp2_ok=packet.bmp2_ok,
+            ext_barometer_ok=packet.ext_barometer_ok,
+            bno_ok=packet.bno_ok,
+            high_g_ok=packet.high_g_ok,
+            exernal_imu_ok=packet.exernal_imu_ok,
+            roll=packet.roll_filt / 100.0,
         )
 
     def get_gps_lat_degrees(self) -> float:
-
-        """Convert scaled GPS latitude to degrees."""
-        return self.gps_lat / 10_000_000.0
+        """Convert microdegree latitude to degrees."""
+        return self.gps_lat / 1_000_000.0
 
     def get_gps_lng_degrees(self) -> float:
-        """Convert scaled GPS longitude to degrees."""
-        return self.gps_lng / 10_000_000.0
+        """Convert microdegree longitude to degrees."""
+        return self.gps_lng / 1_000_000.0
 
     def get_gps_alt_meters(self) -> float:
-        """Convert GPS altitude from millimeters to meters."""
-        return self.gps_alt / 1000.0
+        """GPS altitude in meters MSL."""
+        return float(self.gps_alt)
 
 
 class PayloadTelemetryData(BaseModel):
@@ -204,9 +156,11 @@ class PayloadTelemetryData(BaseModel):
 
     # Payload-specific fields
     distance_to_target: float = Field(..., description="Distance to target (meters)")
-    destination_reached: bool = Field(..., description="Whether destination has been reached")
+    destination_reached: bool = Field(
+        ..., description="Whether destination has been reached"
+    )
 
-    @field_validator('gps_lat', 'gps_lng')
+    @field_validator("gps_lat", "gps_lng")
     @classmethod
     def validate_gps_coords(cls, v: int) -> int:
         """Validate GPS coordinates are within valid range."""
@@ -218,7 +172,7 @@ class PayloadTelemetryData(BaseModel):
     def from_bitproto(cls, packet) -> "PayloadTelemetryData":
         """
         Create PayloadTelemetryData from a Bitproto packet.
-        
+
         Args:
             packet: payload_bp.PayloadPacket instance
         """
@@ -232,7 +186,7 @@ class PayloadTelemetryData(BaseModel):
             accel_y=uint32_to_float(packet.accel_y),
             accel_z=uint32_to_float(packet.accel_z),
             distance_to_target=uint32_to_float(packet.distance_to_target),
-            destination_reached=packet.destination_reached
+            destination_reached=packet.destination_reached,
         )
 
     def get_gps_lat_degrees(self) -> float:

@@ -16,7 +16,7 @@ from models import FlightComputerTelemetryData, PayloadTelemetryData
 logger = logging.getLogger(__name__)
 
 # Generic type for telemetry data
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class BaseFlightSession(ABC, Generic[T]):
@@ -32,7 +32,7 @@ class BaseFlightSession(ABC, Generic[T]):
         self.session_name = session_name
 
         self.csv_path = log_dir / "current.csv"
-        self.csv_file = open(self.csv_path, 'w', newline='')
+        self.csv_file = open(self.csv_path, "w", newline="")
         self.csv_writer = csv.writer(self.csv_file)
         self._write_csv_header()
 
@@ -41,8 +41,8 @@ class BaseFlightSession(ABC, Generic[T]):
     def add_telemetry(self, telemetry: T):
         """Add telemetry packet to session."""
         self.telemetry_buffer.append(telemetry)
-        self._append_csv_row(telemetry)
-        self.csv_file.flush()
+        # self._append_csv_row(telemetry)
+        # self.csv_file.flush()
 
     def get_all_data(self, takeoff_offset: Optional[float] = None) -> List[Dict]:
         """Return all telemetry data formatted for frontend."""
@@ -73,7 +73,9 @@ class BaseFlightSession(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def _format_for_frontend(self, telemetry: T, takeoff_offset: Optional[float]) -> List[Dict]:
+    def _format_for_frontend(
+        self, telemetry: T, takeoff_offset: Optional[float]
+    ) -> List[Dict]:
         """Format telemetry for frontend. Subclasses define their own format."""
         pass
 
@@ -86,36 +88,79 @@ class ErisFlightSession(BaseFlightSession[FlightComputerTelemetryData]):
 
     def _write_csv_header(self):
         header = [
-            "timestamp", "cur_time", "gps_lat", "gps_lng", "gps_alt",
-            "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
-            "hg_accel", "altitude", "velocity", "smooth_vel",
-            "pressure", "temperature", "launchsite_msl",
-            "airbrake_cont", "ab_servo_pct", "cnrd_servo_pct",
-            "drogue_pyro_cont_1", "drogue_pyro_cont_2",
-            "main_pyro_cont_1", "main_pyro_cont_2",
-            "flight_index", "ellipse_on", "cameras_on",
-            "battery_voltage", "flight_stage"
+            "timestamp",
+            "cur_time",
+            "gps_lat",
+            "gps_lng",
+            "gps_alt",
+            "accel_x",
+            "accel_y",
+            "accel_z",
+            "gyro_x",
+            "gyro_y",
+            "gyro_z",
+            "hg_accel",
+            "altitude",
+            "velocity",
+            "smooth_vel",
+            "pressure",
+            "temperature",
+            "launchsite_msl",
+            "airbrake_cont",
+            "ab_servo_pct",
+            "cnrd_servo_pct",
+            "drogue_pyro_cont_1",
+            "drogue_pyro_cont_2",
+            "main_pyro_cont_1",
+            "main_pyro_cont_2",
+            "flight_index",
+            "ellipse_on",
+            "cameras_on",
+            "battery_voltage",
+            "flight_stage",
         ]
         self.csv_writer.writerow(header)
 
     def _append_csv_row(self, telemetry: FlightComputerTelemetryData):
         row = [
             datetime.now().isoformat(),
-            telemetry.cur_time, telemetry.gps_lat, telemetry.gps_lng, telemetry.gps_alt,
-            telemetry.accel_x, telemetry.accel_y, telemetry.accel_z,
-            telemetry.gyro_x, telemetry.gyro_y, telemetry.gyro_z,
-            telemetry.hg_accel, telemetry.altitude, telemetry.velocity, telemetry.smooth_vel,
-            telemetry.pressure, telemetry.temperature, telemetry.launchsite_msl,
-            int(telemetry.airbrake_cont), telemetry.ab_servo_pct, telemetry.cnrd_servo_pct,
-            int(telemetry.drogue_pyro_cont_1), int(telemetry.drogue_pyro_cont_2),
-            int(telemetry.main_pyro_cont_1), int(telemetry.main_pyro_cont_2),
-            telemetry.flight_index, int(telemetry.ellipse_on), int(telemetry.cameras_on),
-            telemetry.battery_voltage, telemetry.flight_stage
+            telemetry.cur_time,
+            telemetry.gps_lat,
+            telemetry.gps_lng,
+            telemetry.gps_alt,
+            telemetry.accel_x,
+            telemetry.accel_y,
+            telemetry.accel_z,
+            telemetry.gyro_x,
+            telemetry.gyro_y,
+            telemetry.gyro_z,
+            telemetry.hg_accel,
+            telemetry.altitude,
+            telemetry.velocity,
+            telemetry.smooth_vel,
+            telemetry.pressure,
+            telemetry.temperature,
+            telemetry.launchsite_msl,
+            int(telemetry.airbrake_cont),
+            telemetry.ab_servo_pct,
+            telemetry.cnrd_servo_pct,
+            int(telemetry.drogue_pyro_cont_1),
+            int(telemetry.drogue_pyro_cont_2),
+            int(telemetry.main_pyro_cont_1),
+            int(telemetry.main_pyro_cont_2),
+            telemetry.flight_index,
+            int(telemetry.ellipse_on),
+            int(telemetry.cameras_on),
+            telemetry.battery_voltage,
+            telemetry.flight_stage,
         ]
         self.csv_writer.writerow(row)
 
-    def _format_for_frontend(self, telemetry: FlightComputerTelemetryData, takeoff_offset: Optional[float]) -> List[Dict]:
+    def _format_for_frontend(
+        self, telemetry: FlightComputerTelemetryData, takeoff_offset: Optional[float]
+    ) -> List[Dict]:
         from utils import format_for_frontend
+
         return format_for_frontend(telemetry, takeoff_offset)
 
 
@@ -127,23 +172,41 @@ class PayloadFlightSession(BaseFlightSession[PayloadTelemetryData]):
 
     def _write_csv_header(self):
         header = [
-            "timestamp", "cur_time", "gps_lat", "gps_lng", "gps_alt",
-            "velocity", "accel_x", "accel_y", "accel_z",
-            "distance_to_target", "destination_reached"
+            "timestamp",
+            "cur_time",
+            "gps_lat",
+            "gps_lng",
+            "gps_alt",
+            "velocity",
+            "accel_x",
+            "accel_y",
+            "accel_z",
+            "distance_to_target",
+            "destination_reached",
         ]
         self.csv_writer.writerow(header)
 
     def _append_csv_row(self, telemetry: PayloadTelemetryData):
         row = [
             datetime.now().isoformat(),
-            telemetry.cur_time, telemetry.gps_lat, telemetry.gps_lng, telemetry.gps_alt,
-            telemetry.velocity, telemetry.accel_x, telemetry.accel_y, telemetry.accel_z,
-            telemetry.distance_to_target, int(telemetry.destination_reached)
+            telemetry.cur_time,
+            telemetry.gps_lat,
+            telemetry.gps_lng,
+            telemetry.gps_alt,
+            telemetry.velocity,
+            telemetry.accel_x,
+            telemetry.accel_y,
+            telemetry.accel_z,
+            telemetry.distance_to_target,
+            int(telemetry.destination_reached),
         ]
         self.csv_writer.writerow(row)
 
-    def _format_for_frontend(self, telemetry: PayloadTelemetryData, takeoff_offset: Optional[float]) -> List[Dict]:
+    def _format_for_frontend(
+        self, telemetry: PayloadTelemetryData, takeoff_offset: Optional[float]
+    ) -> List[Dict]:
         from utils import format_payload_for_frontend
+
         return format_payload_for_frontend(telemetry, takeoff_offset)
 
 
@@ -170,7 +233,9 @@ class BaseStorageManager(ABC, Generic[T]):
         if current_csv.exists():
             recovery_timestamp = self._generate_timestamp()
             prefix = f"{backup_prefix}_" if backup_prefix else ""
-            recovery_path = self.backups_dir / f"{prefix}recovery_{recovery_timestamp}.csv"
+            recovery_path = (
+                self.backups_dir / f"{prefix}recovery_{recovery_timestamp}.csv"
+            )
             shutil.move(str(current_csv), str(recovery_path))
             logger.info(f"Backed up existing current.csv to {recovery_path.name}")
 
@@ -220,7 +285,7 @@ class BaseStorageManager(ABC, Generic[T]):
             "status": "success",
             "backup_filename": backup_path.name,
             "takeoff_offset": self.takeoff_offset_time,
-            "takeoff_time": self.takeoff_wall_time.isoformat()
+            "takeoff_time": self.takeoff_wall_time.isoformat(),
         }
 
     def save_flight(self) -> Dict:
@@ -240,7 +305,7 @@ class BaseStorageManager(ABC, Generic[T]):
         return {
             "status": "success",
             "filename": archive_path.name,
-            "saved_at": datetime.now().isoformat()
+            "saved_at": datetime.now().isoformat(),
         }
 
     def get_session_info(self) -> Dict:
@@ -251,7 +316,9 @@ class BaseStorageManager(ABC, Generic[T]):
             "packet_count": len(self.current_session.telemetry_buffer),
             "duration_seconds": duration,
             "takeoff_offset": self.takeoff_offset_time,
-            "takeoff_time": self.takeoff_wall_time.isoformat() if self.takeoff_wall_time else None
+            "takeoff_time": (
+                self.takeoff_wall_time.isoformat() if self.takeoff_wall_time else None
+            ),
         }
 
     def _generate_timestamp(self) -> str:

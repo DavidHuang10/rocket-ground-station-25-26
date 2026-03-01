@@ -12,21 +12,13 @@
           "order": 1
         },
         {
-          "id": "flight_stage",
-          "type": "indicator",
-          "title": "Flight Stage",
-          "fields": ["stage"],
-          "order": 2,
-          "mapping": ["Idle", "Takeoff", "Burn", "Coast", "Apogee", "Main Parachute", "Landed"]
-        },
-        {
           "id": "altitude",
           "type": "chart",
           "title": "Altitude",
           "fields": ["altitude"],
-          "unit": "m AGL",
+          "unit": "m MSL",
           "precision": 1,
-          "order": 3,
+          "order": 2,
           "chart_color": "#4caf50"
         },
         {
@@ -36,18 +28,28 @@
           "fields": ["velocity"],
           "unit": "m/s",
           "precision": 1,
-          "order": 4,
+          "order": 3,
           "chart_color": "#2196f3"
         },
         {
-          "id": "smooth_velocity",
+          "id": "vertical_velocity",
           "type": "chart",
-          "title": "Smoothed Velocity",
-          "fields": ["smooth_vel"],
+          "title": "Vertical Velocity (Fused)",
+          "fields": ["vertical_velocity"],
           "unit": "m/s",
           "precision": 1,
-          "order": 5,
+          "order": 4,
           "chart_color": "#03a9f4"
+        },
+        {
+          "id": "acceleration",
+          "type": "chart",
+          "title": "Acceleration",
+          "fields": ["acceleration"],
+          "unit": "m/s²",
+          "precision": 2,
+          "order": 5,
+          "chart_color": "#f44336"
         },
         {
           "id": "battery_voltage",
@@ -90,74 +92,21 @@
           "chart_color": "#00bcd4"
         },
         {
-          "id": "accelx",
-          "type": "chart",
-          "title": "Acceleration X",
-          "fields": ["accelx"],
-          "unit": "m/s²",
-          "precision": 2,
-          "order": 10,
-          "chart_color": "#f44336"
+          "id": "gps_sats",
+          "type": "indicator",
+          "title": "GPS Satellites",
+          "fields": ["gps_sats"],
+          "unit": "",
+          "precision": 0,
+          "order": 10
         },
         {
-          "id": "accely",
-          "type": "chart",
-          "title": "Acceleration Y",
-          "fields": ["accely"],
-          "unit": "m/s²",
-          "precision": 2,
+          "id": "gps_fix",
+          "type": "indicator",
+          "title": "GPS Fix",
+          "fields": ["gps_fix"],
           "order": 11,
-          "chart_color": "#4caf50"
-        },
-        {
-          "id": "accelz",
-          "type": "chart",
-          "title": "Acceleration Z",
-          "fields": ["accelz"],
-          "unit": "m/s²",
-          "precision": 2,
-          "order": 12,
-          "chart_color": "#2196f3"
-        },
-        {
-          "id": "hg_accel",
-          "type": "chart",
-          "title": "High-G Accelerometer",
-          "fields": ["hg_accel"],
-          "unit": "m/s²",
-          "precision": 1,
-          "order": 13,
-          "chart_color": "#ff5722"
-        },
-        {
-          "id": "gyrox",
-          "type": "chart",
-          "title": "Gyroscope X",
-          "fields": ["gyrox"],
-          "unit": "rad/s",
-          "precision": 3,
-          "order": 14,
-          "chart_color": "#f44336"
-        },
-        {
-          "id": "gyroy",
-          "type": "chart",
-          "title": "Gyroscope Y",
-          "fields": ["gyroy"],
-          "unit": "rad/s",
-          "precision": 3,
-          "order": 15,
-          "chart_color": "#4caf50"
-        },
-        {
-          "id": "gyroz",
-          "type": "chart",
-          "title": "Gyroscope Z",
-          "fields": ["gyroz"],
-          "unit": "rad/s",
-          "precision": 3,
-          "order": 16,
-          "chart_color": "#2196f3"
+          "mapping": ["No Fix", "Dead Reckoning", "2D Fix", "3D Fix", "GNSS+DR", "Time Only"]
         },
         {
           "id": "temp",
@@ -166,18 +115,8 @@
           "fields": ["temp"],
           "unit": "°C",
           "precision": 1,
-          "order": 17,
+          "order": 12,
           "chart_color": "#673ab7"
-        },
-        {
-          "id": "pressure",
-          "type": "chart",
-          "title": "Pressure",
-          "fields": ["pressure"],
-          "unit": "hPa",
-          "precision": 2,
-          "order": 18,
-          "chart_color": "#607d8b"
         },
         {
           "id": "ab_servo",
@@ -186,7 +125,7 @@
           "fields": ["ab_servo"],
           "unit": "%",
           "precision": 1,
-          "order": 19,
+          "order": 13,
           "chart_color": "#3f51b5"
         },
         {
@@ -196,31 +135,24 @@
           "fields": ["cnrd_servo"],
           "unit": "%",
           "precision": 1,
-          "order": 20,
+          "order": 14,
           "chart_color": "#8bc34a"
         },
         {
-          "id": "launchsite_msl",
-          "type": "indicator",
-          "title": "Launch Site MSL",
-          "fields": ["launchsite_msl"],
-          "unit": "m",
-          "precision": 1,
-          "order": 21
-        },
-        {
-          "id": "flight_index",
-          "type": "indicator",
-          "title": "Flight Index",
-          "fields": ["flight_index"],
-          "precision": 0,
-          "order": 22
+          "id": "roll",
+          "type": "chart",
+          "title": "Roll Rate",
+          "fields": ["roll"],
+          "unit": "rad/s",
+          "precision": 3,
+          "order": 15,
+          "chart_color": "#ff5722"
         },
         {
           "id": "pyro_continuity",
           "type": "boolean_grid",
           "title": "Pyro Continuity",
-          "order": 23,
+          "order": 16,
           "items": [
             { "label": "Drogue 1", "field": "drogue_cont_1" },
             { "label": "Drogue 2", "field": "drogue_cont_2" },
@@ -229,14 +161,29 @@
           ]
         },
         {
-          "id": "system_status",
+          "id": "camera_status",
           "type": "boolean_grid",
-          "title": "System Status",
-          "order": 24,
+          "title": "Camera Status",
+          "order": 17,
           "items": [
-            { "label": "Airbrake", "field": "airbrake_cont" },
-            { "label": "Ellipse INS", "field": "ellipse_on" },
-            { "label": "Cameras", "field": "cameras_on" }
+            { "label": "Runcam Active", "field": "runcam_active" },
+            { "label": "Runcam Overcurrent", "field": "runcam_overcurrent" },
+            { "label": "Livecam Active", "field": "livecam_active" },
+            { "label": "Livecam Overcurrent", "field": "livecam_overcurrent" }
+          ]
+        },
+        {
+          "id": "sensor_health",
+          "type": "boolean_grid",
+          "title": "Sensor Health",
+          "order": 18,
+          "items": [
+            { "label": "BMP1", "field": "bmp1_ok" },
+            { "label": "BMP2", "field": "bmp2_ok" },
+            { "label": "Ext Baro", "field": "ext_barometer_ok" },
+            { "label": "BNO IMU", "field": "bno_ok" },
+            { "label": "High-G", "field": "high_g_ok" },
+            { "label": "Ext IMU", "field": "exernal_imu_ok" }
           ]
         }
       ]
@@ -352,81 +299,33 @@
     },
     "altitude": {
       "name": "Altitude",
-      "unit": "m",
+      "unit": "m MSL",
       "precision": 1,
-      "description": "Altitude above ground level"
+      "description": "Altitude MSL from Kalman filter"
     },
     "velocity": {
       "name": "Velocity",
       "unit": "m/s",
       "precision": 1,
-      "description": "Vertical velocity"
+      "description": "Velocity from Kalman filter"
     },
-    "smooth_vel": {
-      "name": "Smooth Velocity",
+    "vertical_velocity": {
+      "name": "Vertical Velocity",
       "unit": "m/s",
       "precision": 1,
-      "description": "Smoothed vertical velocity"
+      "description": "Fused vertical velocity"
+    },
+    "acceleration": {
+      "name": "Acceleration",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration from Kalman filter"
     },
     "battery_voltage": {
       "name": "Battery Voltage",
       "unit": "V",
       "precision": 2,
       "description": "Main battery voltage"
-    },
-    "accelx": {
-      "name": "Accel X",
-      "unit": "m/s²",
-      "precision": 2,
-      "description": "Acceleration X-axis"
-    },
-    "accely": {
-      "name": "Accel Y",
-      "unit": "m/s²",
-      "precision": 2,
-      "description": "Acceleration Y-axis"
-    },
-    "accelz": {
-      "name": "Accel Z",
-      "unit": "m/s²",
-      "precision": 2,
-      "description": "Acceleration Z-axis"
-    },
-    "gyrox": {
-      "name": "Gyro X",
-      "unit": "rad/s",
-      "precision": 3,
-      "description": "Gyroscope X-axis"
-    },
-    "gyroy": {
-      "name": "Gyro Y",
-      "unit": "rad/s",
-      "precision": 3,
-      "description": "Gyroscope Y-axis"
-    },
-    "gyroz": {
-      "name": "Gyro Z",
-      "unit": "rad/s",
-      "precision": 3,
-      "description": "Gyroscope Z-axis"
-    },
-    "hg_accel": {
-      "name": "High-G Accel",
-      "unit": "m/s²",
-      "precision": 1,
-      "description": "High-G accelerometer"
-    },
-    "temp": {
-      "name": "Temperature",
-      "unit": "°C",
-      "precision": 1,
-      "description": "Ambient temperature"
-    },
-    "pressure": {
-      "name": "Pressure",
-      "unit": "hPa",
-      "precision": 2,
-      "description": "Barometric pressure"
     },
     "lat": {
       "name": "Latitude",
@@ -444,13 +343,25 @@
       "name": "GPS Altitude",
       "unit": "m",
       "precision": 1,
-      "description": "GPS altitude"
+      "description": "GPS altitude MSL"
     },
-    "stage": {
-      "name": "Flight Stage",
+    "gps_sats": {
+      "name": "GPS Satellites",
       "unit": "",
       "precision": 0,
-      "description": "Current flight stage"
+      "description": "GPS satellites in view"
+    },
+    "gps_fix": {
+      "name": "GPS Fix",
+      "unit": "",
+      "precision": 0,
+      "description": "GPS fix status (0=no fix, 2=2D, 3=3D, 4=GNSS+DR)"
+    },
+    "temp": {
+      "name": "Temperature",
+      "unit": "°C",
+      "precision": 1,
+      "description": "Ambient temperature"
     },
     "ab_servo": {
       "name": "Airbrake Servo",
@@ -463,6 +374,12 @@
       "unit": "%",
       "precision": 1,
       "description": "Canard servo position"
+    },
+    "roll": {
+      "name": "Roll Rate",
+      "unit": "rad/s",
+      "precision": 3,
+      "description": "Filtered roll rate"
     },
     "drogue_cont_1": {
       "name": "Drogue Continuity 1",
@@ -488,35 +405,65 @@
       "precision": 0,
       "description": "Main parachute pyro channel 2"
     },
-    "airbrake_cont": {
-      "name": "Airbrake Continuity",
+    "runcam_active": {
+      "name": "Runcam Active",
       "unit": "",
       "precision": 0,
-      "description": "Airbrake system continuity"
+      "description": "Runcam power status"
     },
-    "launchsite_msl": {
-      "name": "Launch Site MSL",
-      "unit": "m",
-      "precision": 1,
-      "description": "Launch site altitude (MSL baseline)"
-    },
-    "flight_index": {
-      "name": "Flight Index",
+    "runcam_overcurrent": {
+      "name": "Runcam Overcurrent",
       "unit": "",
       "precision": 0,
-      "description": "Flight plan index for airbrake control"
+      "description": "Runcam overcurrent fault"
     },
-    "ellipse_on": {
-      "name": "Ellipse INS",
+    "livecam_active": {
+      "name": "Livecam Active",
       "unit": "",
       "precision": 0,
-      "description": "Ellipse INS power status"
+      "description": "Live video camera power status"
     },
-    "cameras_on": {
-      "name": "Cameras",
+    "livecam_overcurrent": {
+      "name": "Livecam Overcurrent",
       "unit": "",
       "precision": 0,
-      "description": "Camera system power status"
+      "description": "Live video camera overcurrent fault"
+    },
+    "bmp1_ok": {
+      "name": "BMP1 OK",
+      "unit": "",
+      "precision": 0,
+      "description": "BMP1 barometer health"
+    },
+    "bmp2_ok": {
+      "name": "BMP2 OK",
+      "unit": "",
+      "precision": 0,
+      "description": "BMP2 barometer health"
+    },
+    "ext_barometer_ok": {
+      "name": "Ext Barometer OK",
+      "unit": "",
+      "precision": 0,
+      "description": "External barometer health"
+    },
+    "bno_ok": {
+      "name": "BNO IMU OK",
+      "unit": "",
+      "precision": 0,
+      "description": "BNO IMU health"
+    },
+    "high_g_ok": {
+      "name": "High-G OK",
+      "unit": "",
+      "precision": 0,
+      "description": "High-G accelerometer health"
+    },
+    "exernal_imu_ok": {
+      "name": "External IMU OK",
+      "unit": "",
+      "precision": 0,
+      "description": "External IMU health"
     },
     "distance_to_target": {
       "name": "Distance to Target",
@@ -529,6 +476,24 @@
       "unit": "",
       "precision": 0,
       "description": "Whether payload has reached target"
+    },
+    "accelx": {
+      "name": "Accel X",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration X-axis"
+    },
+    "accely": {
+      "name": "Accel Y",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration Y-axis"
+    },
+    "accelz": {
+      "name": "Accel Z",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "Acceleration Z-axis"
     }
   }
 }

@@ -1,61 +1,134 @@
-proto telemetry_bp;
+// We have around 146 bytes per second
+// Spreading factor of 9
 
-message TelemetryPacket {
-    // 1. Time
-    uint32 cur_time = 1;
+proto duke_aero_telementry;
 
-    // 2. GPS
-    int32 gps_lat = 2; // Scaled by 10^7
-    int32 gps_lng = 3; // Scaled by 10^7
-    int32 gps_alt = 4; // mm
+option c.name_prefix = "bitproto_";
 
-    // 3. IMU
-    // Assuming float is 32-bit (standard IEEE 754 single precision)
-    // bitproto doesn't have a 'float' type natively in v1.0, 
-    // but usually mapped to uint32 or byte array if raw access needed.
-    // HOWEVER, bitproto documentation mentions 'float' is NOT supported?
-    // Let's double check bitproto types.
-    // Wait, bitproto v0.4+ supports: bool, int, uint, byte, array, enum, message.
-    // DOES IT SUPPORT FLOAT?
-    // Searching docs... "Bitproto does not support floating point types."
-    // We must map floats to int/uint (e.g. fixed point) OR cast them to uint32.
-    // Given the current proto uses float, let's treat them as raw uint32 for simple transport,
-    // or better, standard fixed-point if we want "proto-like" behavior.
-    // BUT, to keep migration simple and identical to C memory layout of float, 
-    // we can use `uint32` and cast on both ends. This preserves the exact IEEE 754 bits.
-    
-    // Actually, let's check if we can just define them as uint32 and cast in code.
-    // Yes, that's the standard way in bit-level serialization if the language doesn't support float.
+// Flight Stages
+// 3 bits, so we can have up to 8 stages
+enum FlightStage : uint4 {
+    // or can we assume we will always be in a consistent state?
+    STAGE_HORIZONTAL = 0;
+    STAGE_PAD = 1;
+    STAGE_BURN = 2;
+    STAGE_COAST = 3;
+    STAGE_APOGEE = 4;
+    STAGE_DROGUE = 5;
+    STAGE_MAIN = 6;
+    STAGE_LANDED = 7;
+    STAGE_TESTING = 8;
+}
 
-    uint32 accel_x = 5; 
-    uint32 accel_y = 6;
-    uint32 accel_z = 7;
-    uint32 gyro_x = 8;
-    uint32 gyro_y = 9;
-    uint32 gyro_z = 10;
-    uint32 hg_accel = 11;
+// Percents will be represented as uint8 (0-100)
+// This gives us about 0.39% resolution
+type Percent = uint8;
 
-    // 4. Flight Data
-    uint32 alt_baro = 12;
-    uint32 vel_vertical = 13;
-    uint32 smooth_vel = 14;
-    uint32 press = 15;
-    uint32 temp = 16;
-    uint32 launchsite_msl = 17;
+// Temperature in celcius stored w/ 0.5 degree resolution
+// so, round(temp_celcius * 2)
+// i.e. 28.5 C -> 57 stored
+// Range: 0C to 127.5C
+type Temperature = uint8;
 
-    // 5. Servos & Continuity
-    bool airbrake_cont = 18;
-    uint32 ab_servo_pct = 19;
-    uint32 cnrd_servo_pct = 20;
-    bool drogue_pyro_cont_1 = 21;
-    bool drogue_pyro_cont_2 = 22;
-    bool main_pyro_cont_1 = 23;
-    bool main_pyro_cont_2 = 24;
+// Main telemetry data packet
+message FlightStatus {
+    // Timestamp in milliseconds since launch
+    // Max value:
+    uint32 timestamp_ms = 1;
 
-    // 6. State & Status
-    int32 flight_index = 25;
-    bool ellipse_on = 26;
-    bool cameras_on = 27;
-    uint32 battery_voltage = 28;
-    int32 flight_stage = 29;
+    // Canard angles
+    // Range: 2^8 values, as a percentage (0-100%)
+    Percent canard_angle_pct = 2;
+
+    // Airbrake deployment
+    // Range: 2^8 values, as a percentage (0-100%)
+    Percent airbrake_deploy_pct = 3;
+
+    // Battery voltage in millivolts
+    // Max value: 65535 mV = 65.535 V
+    uint16 battery_voltage_mv = 4;
+
+    // Runcam active status
+    // True if runcam is active, false otherwise
+    bool runcam_active = 5;
+    bool runcam_overcurrent = 6;
+
+    // Live-video cam active status
+    // True if live-video cam is active, false otherwise
+    bool livecam_active = 7;
+    bool livecam_overcurrent = 8;
+
+    // Current altitude in meters MSL (from kalman)
+    // Range: -500 to 65535 meters
+    // NOTE: This number is offset by +500
+    uint16 altitude_msl_m = 9;
+
+    // Current velocity in cm/s (from kalman)
+    // Range: -327.68 to 327.67 m/s
+    int20 velocity_mm_s = 10;
+
+    // Current acceleration in cm/s^2 (from kalman)
+    // Range: -327.68 to 327.67 m/s^2
+    int16 acceleration_mss = 11;
+
+    // GPS Latitude & Long in microdegrees
+    int32 gps_lat_microdeg = 12;
+    int32 gps_lng_microdeg = 13;
+
+    // GPS altitude in meters MSL
+    // Range: -500 to 65535 meters
+    // NOTE: This number is offset by +500
+    uint16 gps_altitude_msl_m = 14;
+
+    // GPS satellites in view
+    // Range: 0-64 sats
+    uint6 gps_sats_in_view = 15;
+
+    // GPS fix status
+    // True if GPS has a fix, false otherwise
+    // Directly from the GNSS module,
+    // 0 = no fix, 1 = dead reckoning only, 2 = 2D fix, 3 = 3D fix
+    // 4 = GNSS+DR, 5 = time only fix
+    uint3 gps_fix_status = 16;
+
+    // Temperature in degrees Celsius
+    // See typedef Temperature line
+    // Range: 0C to 127.5C
+    Temperature temperature_celsius = 17;
+
+    // Vertical velocity (fused) in cm/s
+    // Signed value
+    int32 vertical_velocity_cms = 18;
+
+    // Continuity (bool)
+   	bool drogue_pyro_cont_1 = 19;
+	bool drogue_pyro_cont_2 = 20;
+	bool main_pyro_cont_1 = 21;
+	bool main_pyro_cont_2 = 22;
+
+	bool bmp1_ok = 23;
+	bool bmp2_ok = 24;
+	bool ext_barometer_ok = 25;
+
+	// Accelerometer Data
+	bool bno_ok = 26;
+	bool high_g_ok = 27;
+	bool exernal_imu_ok = 28;
+
+	// Rad/s * 100
+	// Range: -32.768 to 32.767 rad/s
+	int16 roll_filt = 29;
+
+    enum flight_stage = 30;
+}
+
+message LogEntry {
+    // Timestamp in milliseconds since launch
+    uint32 timestamp_ms = 1;
+
+    // Byte maps to char in C,
+    // so with 146 bytes per second,
+    // we can transmit 128 bytes pretty safely
+    // This should be a null-terminated string
+    byte[128] data = 2;
 }
