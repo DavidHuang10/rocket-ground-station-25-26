@@ -80,10 +80,6 @@ createApp({
         telemetryData() {
             return this.pageData[this.currentPage] || {};
         },
-        flightStage() {
-            const stageData = this.telemetryData.stage;
-            return stageData && stageData.length > 0 ? stageData[stageData.length - 1].value : 0;
-        },
         // Get current page's panels from config.pages
         currentPageConfig() {
             if (!this.config?.pages) return null;
@@ -92,10 +88,6 @@ createApp({
         sortedPanels() {
             if (!this.currentPageConfig) return [];
             return [...this.currentPageConfig.panels].sort((a, b) => a.order - b.order);
-        },
-        commandStatusIcon() {
-            if (!this.commandStatus) return '';
-            return '';
         },
         commandStatusText() {
             if (!this.commandStatus) return '';
@@ -571,9 +563,8 @@ createApp({
             return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
         },
 
-        getStageName(stage) {
-            const panel = this.currentPageConfig?.panels.find(p => p.id === 'flight_stage' || p.id === 'destination_status');
-            return panel?.mapping?.[stage] || stage.toString();
+        getStageName(value, panel) {
+            return panel?.mapping?.[value] ?? value.toString();
         },
 
         getContinuityClass(source) {

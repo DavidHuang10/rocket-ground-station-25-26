@@ -113,7 +113,7 @@
                     <h2>{{ panel.title }}</h2>
                     <div class="stage-indicator">
                         <div class="stage-value">{{ formatValue(getCurrentValue(panel.fields[0]), panel.precision) }}</div>
-                        <div v-if="panel.mapping" class="stage-name">{{ getStageName(getCurrentValue(panel.fields[0])) }}</div>
+                        <div v-if="panel.mapping" class="stage-name">{{ getStageName(getCurrentValue(panel.fields[0]), panel) }}</div>
                     </div>
                 </div>
 

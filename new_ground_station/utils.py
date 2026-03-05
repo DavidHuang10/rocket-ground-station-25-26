@@ -259,8 +259,6 @@ async def unified_serial_producer(port: str, baudrate: int = 115200):
                                 packet.decode(bytearray(payload))
                                 telemetry = source["data_model"].from_bitproto(packet)
 
-                                print(telemetry)
-
                                 target_queue = global_telemetry_queues.get(
                                     source["queue_name"]
                                 )
