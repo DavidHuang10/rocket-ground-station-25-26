@@ -1,6 +1,13 @@
+import struct
+
 from pydantic import BaseModel, Field, field_validator
 
 from typing import Optional
+
+
+def uint32_to_float(val: int) -> float:
+    """Convert uint32 (IEEE 754 bits) back to float."""
+    return struct.unpack('<f', struct.pack('<I', val))[0]
 
 
 class FlightComputerTelemetryData(BaseModel):
@@ -110,13 +117,13 @@ class FlightComputerTelemetryData(BaseModel):
             gps_sats_in_view=packet.gps_sats_in_view,
             gps_fix_status=packet.gps_fix_status,
             altitude=float(packet.altitude_msl_m - 500),
-            velocity=packet.velocity_mm_s / 100.0,
+            velocity=packet.velocity_mm_s / 1000.0,
             acceleration=packet.acceleration_mss / 100.0,
             vertical_velocity=packet.vertical_velocity_cms / 100.0,
             airbrake_deploy_pct=packet.airbrake_deploy_pct,
             canard_angle_pct=packet.canard_angle_pct,
             battery_voltage=packet.battery_voltage_mv / 1000.0,
-            temperature=packet.temperature_celsius / 4.0,
+            temperature=packet.temperature_celsius / 2.0,
             runcam_active=packet.runcam_active,
             runcam_overcurrent=packet.runcam_overcurrent,
             livecam_active=packet.livecam_active,
