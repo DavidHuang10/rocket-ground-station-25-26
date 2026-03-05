@@ -39,8 +39,8 @@ pip3 install --break-system-packages --ignore-installed -r "$APP_DIR/requirement
 # Add raspy to dialout group for serial access
 usermod -a -G dialout raspy 2>/dev/null || true
 
-# Allow Python to bind to port 80 without root
-PYTHON_PATH=$(which python3)
+# Allow Python to bind to port 80 without root (resolve symlink for setcap)
+PYTHON_PATH=$(readlink -f $(which python3))
 setcap 'cap_net_bind_service=+ep' "$PYTHON_PATH"
 
 echo ""

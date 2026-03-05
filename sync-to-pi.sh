@@ -18,7 +18,7 @@ echo "Source: $SOURCE_DIR"
 echo "Dest:   $PI_USER@$PI_HOST:$DEST_DIR"
 echo ""
 
-rsync -avz --delete \
+rsync -avzp --delete \
   --exclude '.git' \
   --exclude '.gitignore' \
   --exclude '.DS_Store' \
