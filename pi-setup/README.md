@@ -11,7 +11,7 @@ Sets up a Pi to host a telemetry dashboard accessible via WiFi hotspot.
 | Hotspot SSID | `ground_station` |
 | Hotspot Password | `31415926` |
 | Hotspot Dashboard URL | `http://192.168.4.1` |
-| Ethernet Dashboard URL | `http://192.168.1.1` |
+| Ethernet Dashboard URL | `http://192.168.1.1` (Pi acts as DHCP server, no manual IP needed) |
 
 ## Initial Setup
 

@@ -30,7 +30,7 @@ apt update
 
 echo ""
 echo "[2/4] Installing system dependencies..."
-apt install -y python3-pip
+apt install -y python3-pip dnsmasq
 
 echo ""
 echo "[3/4] Installing Python packages..."
@@ -56,7 +56,26 @@ nmcli connection add \
     connection.autoconnect yes
 
 echo ""
-echo "[5/5] Setting up auto-start service..."
+echo "[5/6] Configuring DHCP server on ethernet (dnsmasq)..."
+# Tell NetworkManager not to manage dnsmasq
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/no-dnsmasq.conf << 'EOF'
+[main]
+dns=none
+EOF
+
+# Configure dnsmasq to serve DHCP on eth0 only
+cat > /etc/dnsmasq.d/eth-dhcp.conf << 'EOF'
+interface=eth0
+bind-interfaces
+dhcp-range=192.168.1.100,192.168.1.200,24h
+EOF
+
+systemctl enable dnsmasq
+systemctl restart dnsmasq
+
+echo ""
+echo "[6/6] Setting up auto-start service..."
 cp "$SCRIPT_DIR/ground-station.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable ground-station
