@@ -65,6 +65,19 @@ class FlightComputerTelemetryData(BaseModel):
     # Filtered IMU
     roll: float = Field(..., description="Filtered roll rate (rad/s)")
 
+    # Flight stage
+    flight_stage: int = Field(..., description="Flight stage enum value")
+
+    # Control enable flags
+    canards_enabled: bool = Field(..., description="Canards enabled")
+    airbrakes_enabled: bool = Field(..., description="Airbrakes enabled")
+
+    # BNO raw acceleration Y-axis (m/s²)
+    accel_y: float = Field(..., description="BNO accel Y (m/s²)")
+
+    # High-G accelerometer Y-axis (m/s²)
+    hg_accel_y: float = Field(..., description="High-G accel Y (m/s²)")
+
     @field_validator("gps_lat", "gps_lng")
     @classmethod
     def validate_gps_coords(cls, v: int) -> int:
@@ -97,7 +110,7 @@ class FlightComputerTelemetryData(BaseModel):
             gps_sats_in_view=packet.gps_sats_in_view,
             gps_fix_status=packet.gps_fix_status,
             altitude=float(packet.altitude_msl_m - 500),
-            velocity=packet.velocity_mm_s / 1000.0,
+            velocity=packet.velocity_mm_s / 100.0,
             acceleration=packet.acceleration_mss / 100.0,
             vertical_velocity=packet.vertical_velocity_cms / 100.0,
             airbrake_deploy_pct=packet.airbrake_deploy_pct,
@@ -119,6 +132,11 @@ class FlightComputerTelemetryData(BaseModel):
             high_g_ok=packet.high_g_ok,
             exernal_imu_ok=packet.exernal_imu_ok,
             roll=packet.roll_filt / 100.0,
+            flight_stage=int(packet.flight_stage),
+            canards_enabled=packet.canards_enabled,
+            airbrakes_enabled=packet.airbrakes_enabled,
+            accel_y=packet.accel_y / 100.0,
+            hg_accel_y=packet.hg_accel_y / 10.0,
         )
 
     def get_gps_lat_degrees(self) -> float:

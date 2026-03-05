@@ -70,7 +70,6 @@ async def lifespan(app: FastAPI):
             for p in ports
             if p.device and "Bluetooth" not in p.device and "BTH" not in p.device
         ]
-        active_ports = ["/dev/ttyACM0"]
         if active_ports:
             logger.info(f"Found serial ports on attempt {attempt}: {active_ports}")
             break

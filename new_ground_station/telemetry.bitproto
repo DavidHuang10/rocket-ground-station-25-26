@@ -119,7 +119,17 @@ message FlightStatus {
 	// Range: -32.768 to 32.767 rad/s
 	int16 roll_filt = 29;
 
-    enum flight_stage = 30;
+    FlightStage flight_stage = 30;
+
+    bool canards_enabled = 31;
+    bool airbrakes_enabled = 32;
+
+    // BNO IMU raw acceleration Y-axis (m/s² × 100)
+    int16 accel_y = 33;
+
+    // High-G accelerometer Y-axis (m/s² × 10)
+    // Range: ±3276.8 m/s² covers ADXL375 ±200g range
+    int16 hg_accel_y = 34;
 }
 
 message LogEntry {

@@ -24,6 +24,9 @@
                 <div class="session-info">
                     <span class="info-label">Session Active</span>
                     <span class="info-item">{{ getTotalPackets() }} packets</span>
+                    <span class="info-item last-rx" :class="{ stale: isPacketStale }">
+                        Last RX: {{ currentLastPacketAge }}
+                    </span>
                 </div>
                 <div class="session-actions">
                     <button @click="clearCharts" class="btn-clear">Clear Charts</button>

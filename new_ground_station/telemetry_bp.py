@@ -12,36 +12,46 @@ from bitprotolib import bp
 # Flight Stages
 # 3 bits, so we can have up to 8 stages
 @unique
-class FlightStage(IntEnum): # 3bit
-# TODO: Do we need a STATE_UNKNOWN failsafe state?
+class FlightStage(IntEnum): # 4bit
 # or can we assume we will always be in a consistent state?
-    STAGE_GROUND = 0
-    STAGE_BOOST = 1
-    STAGE_COAST = 2
-    STAGE_DROGUE_DEPLOYED = 3
-    STAGE_MAIN_DEPLOYED = 4
+    STAGE_HORIZONTAL = 0
+    STAGE_PAD = 1
+    STAGE_BURN = 2
+    STAGE_COAST = 3
+    STAGE_APOGEE = 4
+    STAGE_DROGUE = 5
+    STAGE_MAIN = 6
+    STAGE_LANDED = 7
+    STAGE_TESTING = 8
 
 
 # Aliases for backwards compatibility
-# TODO: Do we need a STATE_UNKNOWN failsafe state?
 # or can we assume we will always be in a consistent state?
-STAGE_GROUND: FlightStage = FlightStage.STAGE_GROUND
-STAGE_BOOST: FlightStage = FlightStage.STAGE_BOOST
+STAGE_HORIZONTAL: FlightStage = FlightStage.STAGE_HORIZONTAL
+STAGE_PAD: FlightStage = FlightStage.STAGE_PAD
+STAGE_BURN: FlightStage = FlightStage.STAGE_BURN
 STAGE_COAST: FlightStage = FlightStage.STAGE_COAST
-STAGE_DROGUE_DEPLOYED: FlightStage = FlightStage.STAGE_DROGUE_DEPLOYED
-STAGE_MAIN_DEPLOYED: FlightStage = FlightStage.STAGE_MAIN_DEPLOYED
+STAGE_APOGEE: FlightStage = FlightStage.STAGE_APOGEE
+STAGE_DROGUE: FlightStage = FlightStage.STAGE_DROGUE
+STAGE_MAIN: FlightStage = FlightStage.STAGE_MAIN
+STAGE_LANDED: FlightStage = FlightStage.STAGE_LANDED
+STAGE_TESTING: FlightStage = FlightStage.STAGE_TESTING
 
 
 _FLIGHTSTAGE_VALUE_TO_NAME_MAP: Dict[FlightStage, str] = {
-    FlightStage.STAGE_GROUND: "STAGE_GROUND",
-    FlightStage.STAGE_BOOST: "STAGE_BOOST",
+    FlightStage.STAGE_HORIZONTAL: "STAGE_HORIZONTAL",
+    FlightStage.STAGE_PAD: "STAGE_PAD",
+    FlightStage.STAGE_BURN: "STAGE_BURN",
     FlightStage.STAGE_COAST: "STAGE_COAST",
-    FlightStage.STAGE_DROGUE_DEPLOYED: "STAGE_DROGUE_DEPLOYED",
-    FlightStage.STAGE_MAIN_DEPLOYED: "STAGE_MAIN_DEPLOYED",
+    FlightStage.STAGE_APOGEE: "STAGE_APOGEE",
+    FlightStage.STAGE_DROGUE: "STAGE_DROGUE",
+    FlightStage.STAGE_MAIN: "STAGE_MAIN",
+    FlightStage.STAGE_LANDED: "STAGE_LANDED",
+    FlightStage.STAGE_TESTING: "STAGE_TESTING",
 }
 
 def bp_processor_FlightStage() -> bp.Processor:
-    return bp.EnumProcessor(bp.Uint(3))
+    return bp.EnumProcessor(bp.Uint(4))
 
 
 # Percents will be represented as uint8 (0-100)
@@ -74,7 +84,7 @@ class FlightStatus(bp.MessageBase):
     Main telemetry data packet
     """
     # Number of bytes to serialize class FlightStatus
-    BYTES_LENGTH: ClassVar[int] = 35
+    BYTES_LENGTH: ClassVar[int] = 40
 
     # Timestamp in milliseconds since launch
     # Max value:
@@ -144,13 +154,34 @@ class FlightStatus(bp.MessageBase):
     # Rad/s * 100
     # Range: -32.768 to 32.767 rad/s
     roll_filt: int = 0 # 16bit
+    flight_stage: Union[int, FlightStage] = FlightStage.STAGE_HORIZONTAL
+    # This field is a proxy to hold integer value of enum field 'flight_stage'
+    _enum_field_proxy__flight_stage: int = field(init=False, repr=False) # 4bit
+    canards_enabled: bool = False # 1bit
+    airbrakes_enabled: bool = False # 1bit
+    # BNO IMU raw acceleration Y-axis (m/s² × 100)
+    accel_y: int = 0 # 16bit
+    # High-G accelerometer Y-axis (m/s² × 10)
+    # Range: ±3276.8 m/s² covers ADXL375 ±200g range
+    hg_accel_y: int = 0 # 16bit
 
     def __post_init__(self):
-        pass
+        # initialize handling of enum field 'flight_stage' as `enum.IntEnum`
+        if not isinstance(getattr(FlightStatus, "flight_stage", False), property):
+            self._enum_field_proxy__flight_stage = self.flight_stage
+            FlightStatus.flight_stage = property(FlightStatus._get_flight_stage, FlightStatus._set_flight_stage)  # type: ignore
 
     @staticmethod
     def dict_factory(kv_pairs):
         return {k: v for k, v in kv_pairs if not k.startswith('_enum_field_proxy__')}
+
+    def _get_flight_stage(self) -> FlightStage:
+        """property getter for enum proxy field"""
+        return FlightStage(self._enum_field_proxy__flight_stage)
+
+    def _set_flight_stage(self, val):
+        """property setter for enum proxy field"""
+        self._enum_field_proxy__flight_stage = val
 
     def bp_processor(self) -> bp.Processor:
         field_processors: List[bp.Processor] = [
@@ -183,8 +214,13 @@ class FlightStatus(bp.MessageBase):
             bp.MessageFieldProcessor(27, bp.Bool()),
             bp.MessageFieldProcessor(28, bp.Bool()),
             bp.MessageFieldProcessor(29, bp.Int(16)),
+            bp.MessageFieldProcessor(30, bp_processor_FlightStage()),
+            bp.MessageFieldProcessor(31, bp.Bool()),
+            bp.MessageFieldProcessor(32, bp.Bool()),
+            bp.MessageFieldProcessor(33, bp.Int(16)),
+            bp.MessageFieldProcessor(34, bp.Int(16)),
         ]
-        return bp.MessageProcessor(False, 275, field_processors)
+        return bp.MessageProcessor(False, 313, field_processors)
 
     def bp_set_byte(self, di: bp.DataIndexer, lshift: int, b: bp.byte) -> None:
         if di.field_number == 1:
@@ -245,6 +281,16 @@ class FlightStatus(bp.MessageBase):
             self.exernal_imu_ok = bool(b)
         if di.field_number == 29:
             self.roll_filt |= bp.int16((int(b) << lshift))
+        if di.field_number == 30:
+            self.flight_stage |= (FlightStage(b) << lshift)
+        if di.field_number == 31:
+            self.canards_enabled = bool(b)
+        if di.field_number == 32:
+            self.airbrakes_enabled = bool(b)
+        if di.field_number == 33:
+            self.accel_y |= bp.int16((int(b) << lshift))
+        if di.field_number == 34:
+            self.hg_accel_y |= bp.int16((int(b) << lshift))
         return
 
     def bp_get_byte(self, di: bp.DataIndexer, rshift: int) -> bp.byte:
@@ -306,6 +352,16 @@ class FlightStatus(bp.MessageBase):
             return (int(self.exernal_imu_ok) >> rshift) & 255
         if di.field_number == 29:
             return (self.roll_filt >> rshift) & 255
+        if di.field_number == 30:
+            return (self.flight_stage >> rshift) & 255
+        if di.field_number == 31:
+            return (int(self.canards_enabled) >> rshift) & 255
+        if di.field_number == 32:
+            return (int(self.airbrakes_enabled) >> rshift) & 255
+        if di.field_number == 33:
+            return (self.accel_y >> rshift) & 255
+        if di.field_number == 34:
+            return (self.hg_accel_y >> rshift) & 255
         return bp.byte(0)  # Won't reached
 
     def bp_get_accessor(self, di: bp.DataIndexer) -> bp.Accessor:

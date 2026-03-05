@@ -5,6 +5,14 @@
       "name": "Eris",
       "panels": [
         {
+          "id": "flight_stage",
+          "type": "indicator",
+          "title": "Flight Stage",
+          "fields": ["flight_stage"],
+          "order": 0,
+          "mapping": ["Horizontal", "Pad", "Burn", "Coast", "Apogee", "Drogue", "Main", "Landed", "Testing"]
+        },
+        {
           "id": "mission_timer",
           "type": "timer",
           "title": "Mission Elapsed Time",
@@ -185,6 +193,36 @@
             { "label": "High-G", "field": "high_g_ok" },
             { "label": "Ext IMU", "field": "exernal_imu_ok" }
           ]
+        },
+        {
+          "id": "control_enable",
+          "type": "boolean_grid",
+          "title": "Control Enable",
+          "order": 19,
+          "items": [
+            { "label": "Canards", "field": "canards_enabled" },
+            { "label": "Airbrakes", "field": "airbrakes_enabled" }
+          ]
+        },
+        {
+          "id": "accel_y",
+          "type": "chart",
+          "title": "IMU Accel Y",
+          "fields": ["accel_y"],
+          "unit": "m/s²",
+          "precision": 2,
+          "order": 20,
+          "chart_color": "#4caf50"
+        },
+        {
+          "id": "hg_accel_y",
+          "type": "chart",
+          "title": "High-G Accel Y",
+          "fields": ["hg_accel_y"],
+          "unit": "m/s²",
+          "precision": 1,
+          "order": 21,
+          "chart_color": "#00e676"
         }
       ]
     },
@@ -291,6 +329,12 @@
     }
   ],
   "field_metadata": {
+    "flight_stage": {
+      "name": "Flight Stage",
+      "unit": "",
+      "precision": 0,
+      "description": "Current flight state machine stage"
+    },
     "cur_time": {
       "name": "Mission Elapsed Time",
       "unit": "ms",
@@ -465,6 +509,18 @@
       "precision": 0,
       "description": "External IMU health"
     },
+    "canards_enabled": {
+      "name": "Canards Enabled",
+      "unit": "",
+      "precision": 0,
+      "description": "Canard control system enabled"
+    },
+    "airbrakes_enabled": {
+      "name": "Airbrakes Enabled",
+      "unit": "",
+      "precision": 0,
+      "description": "Airbrake control system enabled"
+    },
     "distance_to_target": {
       "name": "Distance to Target",
       "unit": "m",
@@ -494,6 +550,18 @@
       "unit": "m/s²",
       "precision": 2,
       "description": "Acceleration Z-axis"
+    },
+    "accel_y": {
+      "name": "IMU Accel Y",
+      "unit": "m/s²",
+      "precision": 2,
+      "description": "BNO IMU raw acceleration Y-axis"
+    },
+    "hg_accel_y": {
+      "name": "High-G Accel Y",
+      "unit": "m/s²",
+      "precision": 1,
+      "description": "ADXL375 high-G accelerometer Y-axis"
     }
   }
 }

@@ -95,6 +95,11 @@ ERIS_FIELDS = [
     ("high_g_ok", "high_g_ok"),
     ("exernal_imu_ok", "exernal_imu_ok"),
     ("roll", "roll"),
+    ("flight_stage", "flight_stage"),
+    ("canards_enabled", "canards_enabled"),
+    ("airbrakes_enabled", "airbrakes_enabled"),
+    ("accel_y", "accel_y"),
+    ("hg_accel_y", "hg_accel_y"),
 ]
 
 PAYLOAD_FIELDS = [
@@ -380,6 +385,11 @@ async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
             high_g_ok=True,
             exernal_imu_ok=True,
             roll=roll,
+            flight_stage=0,
+            canards_enabled=True,
+            airbrakes_enabled=True,
+            accel_y=acceleration * math.cos(t * 0.3),
+            hg_accel_y=acceleration * math.cos(t * 0.3) * 2.0,
         )
 
         await telemetry_queue.put(telemetry)
