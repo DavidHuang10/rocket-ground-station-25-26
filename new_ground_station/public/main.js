@@ -13,6 +13,9 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
+            // Theme state
+            isDarkMode: true,
+
             // Connection state
             ws: null,
             connected: false,
@@ -139,6 +142,16 @@ createApp({
     },
 
     methods: {
+        // Theme Toggle
+        toggleTheme() {
+            this.isDarkMode = !this.isDarkMode;
+            if (this.isDarkMode) {
+                document.body.classList.remove('light-mode');
+            } else {
+                document.body.classList.add('light-mode');
+            }
+        },
+
         /*
          * ============================================
          * CONFIGURATION & INITIALIZATION

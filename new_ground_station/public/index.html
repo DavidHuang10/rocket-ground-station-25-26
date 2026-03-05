@@ -14,8 +14,13 @@
     <div id="app">
         <header>
             <h1>ERIS Delta Ground Station</h1>
-            <div class="connection-status" :class="connectionStatus">
-                {{ connectionText }}
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <button @click="toggleTheme" class="btn-theme" title="Toggle Theme">
+                    {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
+                </button>
+                <div class="connection-status" :class="connectionStatus">
+                    {{ connectionText }}
+                </div>
             </div>
         </header>
 
