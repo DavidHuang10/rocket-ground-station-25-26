@@ -35,6 +35,7 @@ htmlcov/
 
 # Logs
 *.log
+flight_logs/
 
 CLAUDE.md
 .claude
