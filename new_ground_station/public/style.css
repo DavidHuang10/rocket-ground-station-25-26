@@ -622,3 +622,13 @@ button:active {
 .chart-panel:hover {
     border-color: #4caf50;
 }
+
+.last-rx {
+    color: #4caf50;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s;
+}
+
+.last-rx.stale {
+    color: #f44336;
+}

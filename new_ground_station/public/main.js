@@ -50,7 +50,11 @@ createApp({
             // Command uplink state
             commandInput: '',
             commandSending: false,
-            commandStatus: null  // {status: 'ack'|'nak'|'timeout'|'error', command: '...', message: '...'}
+            commandStatus: null,  // {status: 'ack'|'nak'|'timeout'|'error', command: '...', message: '...'}
+
+            // Last reception tracking
+            lastPacketWallTime: {},  // {pageId: Date.now()} wall-clock ms of last received packet
+            lastPacketAgeText: {},   // {pageId: string} formatted age, updated every 100ms
         };
     },
 
@@ -59,6 +63,7 @@ createApp({
         // with Chart.js's complex object structure
         this._charts = {};
         this.chartManager = null;
+        this._ageInterval = null;
     },
 
     computed: {
@@ -99,6 +104,13 @@ createApp({
                 error: `"${s.command}" failed: ${s.message || 'unknown error'}`
             };
             return texts[s.status] || s.status;
+        },
+        currentLastPacketAge() {
+            return this.lastPacketAgeText[this.currentPage] || '--';
+        },
+        isPacketStale() {
+            const t = this.lastPacketWallTime[this.currentPage];
+            return !t || (Date.now() - t) > 3000;
         }
     },
 
@@ -109,11 +121,21 @@ createApp({
         this.initCharts();
         this.chartManager = new ChartManager();
         this.connect();
+        this._ageInterval = setInterval(() => {
+            if (!this.config?.pages) return;
+            this.config.pages.forEach(page => {
+                const t = this.lastPacketWallTime[page.id];
+                this.lastPacketAgeText[page.id] = t
+                    ? ((Date.now() - t) / 1000).toFixed(1) + 's ago'
+                    : '--';
+            });
+        }, 100);
     },
 
     beforeUnmount() {
         if (this.ws) this.ws.close();
         if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+        if (this._ageInterval) clearInterval(this._ageInterval);
     },
 
     methods: {
@@ -283,6 +305,7 @@ createApp({
         processTelemetry(pageId, telemetryArray) {
             // Each packet is an array of {time, source, value} objects for a specific page
             this.packetCount[pageId] = (this.packetCount[pageId] || 0) + 1;
+            this.lastPacketWallTime[pageId] = Date.now();
             const pageData = this.pageData[pageId];
             if (!pageData) return;
             

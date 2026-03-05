@@ -9,47 +9,402 @@ from enum import IntEnum, unique
 from bitprotolib import bp
 
 
-@dataclass
-class TelemetryPacket(bp.MessageBase):
-    # Number of bytes to serialize class TelemetryPacket
-    BYTES_LENGTH: ClassVar[int] = 89
+# Flight Stages
+# 3 bits, so we can have up to 8 stages
+@unique
+class FlightStage(IntEnum): # 4bit
+# or can we assume we will always be in a consistent state?
+    STAGE_HORIZONTAL = 0
+    STAGE_PAD = 1
+    STAGE_BURN = 2
+    STAGE_COAST = 3
+    STAGE_APOGEE = 4
+    STAGE_DROGUE = 5
+    STAGE_MAIN = 6
+    STAGE_LANDED = 7
+    STAGE_TESTING = 8
 
-    # 1. Time
-    cur_time: int = 0 # 32bit
-    # 2. GPS
-    gps_lat: int = 0 # 32bit
-    # Scaled by 10^7
-    gps_lng: int = 0 # 32bit
-    # Scaled by 10^7
-    gps_alt: int = 0 # 32bit
-    accel_x: int = 0 # 32bit
-    accel_y: int = 0 # 32bit
-    accel_z: int = 0 # 32bit
-    gyro_x: int = 0 # 32bit
-    gyro_y: int = 0 # 32bit
-    gyro_z: int = 0 # 32bit
-    hg_accel: int = 0 # 32bit
-    # 4. Flight Data
-    alt_baro: int = 0 # 32bit
-    vel_vertical: int = 0 # 32bit
-    smooth_vel: int = 0 # 32bit
-    press: int = 0 # 32bit
-    temp: int = 0 # 32bit
-    launchsite_msl: int = 0 # 32bit
-    # 5. Servos & Continuity
-    airbrake_cont: bool = False # 1bit
-    ab_servo_pct: int = 0 # 32bit
-    cnrd_servo_pct: int = 0 # 32bit
+
+# Aliases for backwards compatibility
+# or can we assume we will always be in a consistent state?
+STAGE_HORIZONTAL: FlightStage = FlightStage.STAGE_HORIZONTAL
+STAGE_PAD: FlightStage = FlightStage.STAGE_PAD
+STAGE_BURN: FlightStage = FlightStage.STAGE_BURN
+STAGE_COAST: FlightStage = FlightStage.STAGE_COAST
+STAGE_APOGEE: FlightStage = FlightStage.STAGE_APOGEE
+STAGE_DROGUE: FlightStage = FlightStage.STAGE_DROGUE
+STAGE_MAIN: FlightStage = FlightStage.STAGE_MAIN
+STAGE_LANDED: FlightStage = FlightStage.STAGE_LANDED
+STAGE_TESTING: FlightStage = FlightStage.STAGE_TESTING
+
+
+_FLIGHTSTAGE_VALUE_TO_NAME_MAP: Dict[FlightStage, str] = {
+    FlightStage.STAGE_HORIZONTAL: "STAGE_HORIZONTAL",
+    FlightStage.STAGE_PAD: "STAGE_PAD",
+    FlightStage.STAGE_BURN: "STAGE_BURN",
+    FlightStage.STAGE_COAST: "STAGE_COAST",
+    FlightStage.STAGE_APOGEE: "STAGE_APOGEE",
+    FlightStage.STAGE_DROGUE: "STAGE_DROGUE",
+    FlightStage.STAGE_MAIN: "STAGE_MAIN",
+    FlightStage.STAGE_LANDED: "STAGE_LANDED",
+    FlightStage.STAGE_TESTING: "STAGE_TESTING",
+}
+
+def bp_processor_FlightStage() -> bp.Processor:
+    return bp.EnumProcessor(bp.Uint(4))
+
+
+# Percents will be represented as uint8 (0-100)
+# This gives us about 0.39% resolution
+Percent = int # 8bit
+
+def bp_processor_Percent() -> bp.Processor:
+    return bp.AliasProcessor(bp.Uint(8))
+
+def bp_default_factory_Percent() -> Percent:
+    return 0
+
+
+# Temperature in celcius stored w/ 0.5 degree resolution
+# so, round(temp_celcius * 2)
+# i.e. 28.5 C -> 57 stored
+# Range: 0C to 127.5C
+Temperature = int # 8bit
+
+def bp_processor_Temperature() -> bp.Processor:
+    return bp.AliasProcessor(bp.Uint(8))
+
+def bp_default_factory_Temperature() -> Temperature:
+    return 0
+
+
+@dataclass
+class FlightStatus(bp.MessageBase):
+    """
+    Main telemetry data packet
+    """
+    # Number of bytes to serialize class FlightStatus
+    BYTES_LENGTH: ClassVar[int] = 40
+
+    # Timestamp in milliseconds since launch
+    # Max value:
+    timestamp_ms: int = 0 # 32bit
+    # Canard angles
+    # Range: 2^8 values, as a percentage (0-100%)
+    canard_angle_pct: Percent = field(default_factory=bp_default_factory_Percent) # 8bit
+    # Airbrake deployment
+    # Range: 2^8 values, as a percentage (0-100%)
+    airbrake_deploy_pct: Percent = field(default_factory=bp_default_factory_Percent) # 8bit
+    # Battery voltage in millivolts
+    # Max value: 65535 mV = 65.535 V
+    battery_voltage_mv: int = 0 # 16bit
+    # Runcam active status
+    # True if runcam is active, false otherwise
+    runcam_active: bool = False # 1bit
+    runcam_overcurrent: bool = False # 1bit
+    # Live-video cam active status
+    # True if live-video cam is active, false otherwise
+    livecam_active: bool = False # 1bit
+    livecam_overcurrent: bool = False # 1bit
+    # Current altitude in meters MSL (from kalman)
+    # Range: -500 to 65535 meters
+    # NOTE: This number is offset by +500
+    altitude_msl_m: int = 0 # 16bit
+    # Current velocity in cm/s (from kalman)
+    # Range: -327.68 to 327.67 m/s
+    velocity_mm_s: int = 0 # 20bit
+    # Current acceleration in cm/s^2 (from kalman)
+    # Range: -327.68 to 327.67 m/s^2
+    acceleration_mss: int = 0 # 16bit
+    # GPS Latitude & Long in microdegrees
+    gps_lat_microdeg: int = 0 # 32bit
+    gps_lng_microdeg: int = 0 # 32bit
+    # GPS altitude in meters MSL
+    # Range: -500 to 65535 meters
+    # NOTE: This number is offset by +500
+    gps_altitude_msl_m: int = 0 # 16bit
+    # GPS satellites in view
+    # Range: 0-64 sats
+    gps_sats_in_view: int = 0 # 6bit
+    # GPS fix status
+    # True if GPS has a fix, false otherwise
+    # Directly from the GNSS module,
+    # 0 = no fix, 1 = dead reckoning only, 2 = 2D fix, 3 = 3D fix
+    # 4 = GNSS+DR, 5 = time only fix
+    gps_fix_status: int = 0 # 3bit
+    # Temperature in degrees Celsius
+    # See typedef Temperature line
+    # Range: 0C to 127.5C
+    temperature_celsius: Temperature = field(default_factory=bp_default_factory_Temperature) # 8bit
+    # Vertical velocity (fused) in cm/s
+    # Signed value
+    vertical_velocity_cms: int = 0 # 32bit
+    # Continuity (bool)
     drogue_pyro_cont_1: bool = False # 1bit
     drogue_pyro_cont_2: bool = False # 1bit
     main_pyro_cont_1: bool = False # 1bit
     main_pyro_cont_2: bool = False # 1bit
-    # 6. State & Status
-    flight_index: int = 0 # 32bit
-    ellipse_on: bool = False # 1bit
-    cameras_on: bool = False # 1bit
-    battery_voltage: int = 0 # 32bit
-    flight_stage: int = 0 # 32bit
+    bmp1_ok: bool = False # 1bit
+    bmp2_ok: bool = False # 1bit
+    ext_barometer_ok: bool = False # 1bit
+    # Accelerometer Data
+    bno_ok: bool = False # 1bit
+    high_g_ok: bool = False # 1bit
+    exernal_imu_ok: bool = False # 1bit
+    # Rad/s * 100
+    # Range: -32.768 to 32.767 rad/s
+    roll_filt: int = 0 # 16bit
+    flight_stage: Union[int, FlightStage] = FlightStage.STAGE_HORIZONTAL
+    # This field is a proxy to hold integer value of enum field 'flight_stage'
+    _enum_field_proxy__flight_stage: int = field(init=False, repr=False) # 4bit
+    canards_enabled: bool = False # 1bit
+    airbrakes_enabled: bool = False # 1bit
+    # BNO IMU raw acceleration Y-axis (m/s² × 100)
+    accel_y: int = 0 # 16bit
+    # High-G accelerometer Y-axis (m/s² × 10)
+    # Range: ±3276.8 m/s² covers ADXL375 ±200g range
+    hg_accel_y: int = 0 # 16bit
+
+    def __post_init__(self):
+        # initialize handling of enum field 'flight_stage' as `enum.IntEnum`
+        if not isinstance(getattr(FlightStatus, "flight_stage", False), property):
+            self._enum_field_proxy__flight_stage = self.flight_stage
+            FlightStatus.flight_stage = property(FlightStatus._get_flight_stage, FlightStatus._set_flight_stage)  # type: ignore
+
+    @staticmethod
+    def dict_factory(kv_pairs):
+        return {k: v for k, v in kv_pairs if not k.startswith('_enum_field_proxy__')}
+
+    def _get_flight_stage(self) -> FlightStage:
+        """property getter for enum proxy field"""
+        return FlightStage(self._enum_field_proxy__flight_stage)
+
+    def _set_flight_stage(self, val):
+        """property setter for enum proxy field"""
+        self._enum_field_proxy__flight_stage = val
+
+    def bp_processor(self) -> bp.Processor:
+        field_processors: List[bp.Processor] = [
+            bp.MessageFieldProcessor(1, bp.Uint(32)),
+            bp.MessageFieldProcessor(2, bp_processor_Percent()),
+            bp.MessageFieldProcessor(3, bp_processor_Percent()),
+            bp.MessageFieldProcessor(4, bp.Uint(16)),
+            bp.MessageFieldProcessor(5, bp.Bool()),
+            bp.MessageFieldProcessor(6, bp.Bool()),
+            bp.MessageFieldProcessor(7, bp.Bool()),
+            bp.MessageFieldProcessor(8, bp.Bool()),
+            bp.MessageFieldProcessor(9, bp.Uint(16)),
+            bp.MessageFieldProcessor(10, bp.Int(20)),
+            bp.MessageFieldProcessor(11, bp.Int(16)),
+            bp.MessageFieldProcessor(12, bp.Int(32)),
+            bp.MessageFieldProcessor(13, bp.Int(32)),
+            bp.MessageFieldProcessor(14, bp.Uint(16)),
+            bp.MessageFieldProcessor(15, bp.Uint(6)),
+            bp.MessageFieldProcessor(16, bp.Uint(3)),
+            bp.MessageFieldProcessor(17, bp_processor_Temperature()),
+            bp.MessageFieldProcessor(18, bp.Int(32)),
+            bp.MessageFieldProcessor(19, bp.Bool()),
+            bp.MessageFieldProcessor(20, bp.Bool()),
+            bp.MessageFieldProcessor(21, bp.Bool()),
+            bp.MessageFieldProcessor(22, bp.Bool()),
+            bp.MessageFieldProcessor(23, bp.Bool()),
+            bp.MessageFieldProcessor(24, bp.Bool()),
+            bp.MessageFieldProcessor(25, bp.Bool()),
+            bp.MessageFieldProcessor(26, bp.Bool()),
+            bp.MessageFieldProcessor(27, bp.Bool()),
+            bp.MessageFieldProcessor(28, bp.Bool()),
+            bp.MessageFieldProcessor(29, bp.Int(16)),
+            bp.MessageFieldProcessor(30, bp_processor_FlightStage()),
+            bp.MessageFieldProcessor(31, bp.Bool()),
+            bp.MessageFieldProcessor(32, bp.Bool()),
+            bp.MessageFieldProcessor(33, bp.Int(16)),
+            bp.MessageFieldProcessor(34, bp.Int(16)),
+        ]
+        return bp.MessageProcessor(False, 313, field_processors)
+
+    def bp_set_byte(self, di: bp.DataIndexer, lshift: int, b: bp.byte) -> None:
+        if di.field_number == 1:
+            self.timestamp_ms |= (int(b) << lshift)
+        if di.field_number == 2:
+            self.canard_angle_pct |= (int(b) << lshift)
+        if di.field_number == 3:
+            self.airbrake_deploy_pct |= (int(b) << lshift)
+        if di.field_number == 4:
+            self.battery_voltage_mv |= (int(b) << lshift)
+        if di.field_number == 5:
+            self.runcam_active = bool(b)
+        if di.field_number == 6:
+            self.runcam_overcurrent = bool(b)
+        if di.field_number == 7:
+            self.livecam_active = bool(b)
+        if di.field_number == 8:
+            self.livecam_overcurrent = bool(b)
+        if di.field_number == 9:
+            self.altitude_msl_m |= (int(b) << lshift)
+        if di.field_number == 10:
+            self.velocity_mm_s |= bp.int32((int(b) << lshift))
+        if di.field_number == 11:
+            self.acceleration_mss |= bp.int16((int(b) << lshift))
+        if di.field_number == 12:
+            self.gps_lat_microdeg |= bp.int32((int(b) << lshift))
+        if di.field_number == 13:
+            self.gps_lng_microdeg |= bp.int32((int(b) << lshift))
+        if di.field_number == 14:
+            self.gps_altitude_msl_m |= (int(b) << lshift)
+        if di.field_number == 15:
+            self.gps_sats_in_view |= (int(b) << lshift)
+        if di.field_number == 16:
+            self.gps_fix_status |= (int(b) << lshift)
+        if di.field_number == 17:
+            self.temperature_celsius |= (int(b) << lshift)
+        if di.field_number == 18:
+            self.vertical_velocity_cms |= bp.int32((int(b) << lshift))
+        if di.field_number == 19:
+            self.drogue_pyro_cont_1 = bool(b)
+        if di.field_number == 20:
+            self.drogue_pyro_cont_2 = bool(b)
+        if di.field_number == 21:
+            self.main_pyro_cont_1 = bool(b)
+        if di.field_number == 22:
+            self.main_pyro_cont_2 = bool(b)
+        if di.field_number == 23:
+            self.bmp1_ok = bool(b)
+        if di.field_number == 24:
+            self.bmp2_ok = bool(b)
+        if di.field_number == 25:
+            self.ext_barometer_ok = bool(b)
+        if di.field_number == 26:
+            self.bno_ok = bool(b)
+        if di.field_number == 27:
+            self.high_g_ok = bool(b)
+        if di.field_number == 28:
+            self.exernal_imu_ok = bool(b)
+        if di.field_number == 29:
+            self.roll_filt |= bp.int16((int(b) << lshift))
+        if di.field_number == 30:
+            self.flight_stage |= (FlightStage(b) << lshift)
+        if di.field_number == 31:
+            self.canards_enabled = bool(b)
+        if di.field_number == 32:
+            self.airbrakes_enabled = bool(b)
+        if di.field_number == 33:
+            self.accel_y |= bp.int16((int(b) << lshift))
+        if di.field_number == 34:
+            self.hg_accel_y |= bp.int16((int(b) << lshift))
+        return
+
+    def bp_get_byte(self, di: bp.DataIndexer, rshift: int) -> bp.byte:
+        if di.field_number == 1:
+            return (self.timestamp_ms >> rshift) & 255
+        if di.field_number == 2:
+            return (self.canard_angle_pct >> rshift) & 255
+        if di.field_number == 3:
+            return (self.airbrake_deploy_pct >> rshift) & 255
+        if di.field_number == 4:
+            return (self.battery_voltage_mv >> rshift) & 255
+        if di.field_number == 5:
+            return (int(self.runcam_active) >> rshift) & 255
+        if di.field_number == 6:
+            return (int(self.runcam_overcurrent) >> rshift) & 255
+        if di.field_number == 7:
+            return (int(self.livecam_active) >> rshift) & 255
+        if di.field_number == 8:
+            return (int(self.livecam_overcurrent) >> rshift) & 255
+        if di.field_number == 9:
+            return (self.altitude_msl_m >> rshift) & 255
+        if di.field_number == 10:
+            return (self.velocity_mm_s >> rshift) & 255
+        if di.field_number == 11:
+            return (self.acceleration_mss >> rshift) & 255
+        if di.field_number == 12:
+            return (self.gps_lat_microdeg >> rshift) & 255
+        if di.field_number == 13:
+            return (self.gps_lng_microdeg >> rshift) & 255
+        if di.field_number == 14:
+            return (self.gps_altitude_msl_m >> rshift) & 255
+        if di.field_number == 15:
+            return (self.gps_sats_in_view >> rshift) & 255
+        if di.field_number == 16:
+            return (self.gps_fix_status >> rshift) & 255
+        if di.field_number == 17:
+            return (self.temperature_celsius >> rshift) & 255
+        if di.field_number == 18:
+            return (self.vertical_velocity_cms >> rshift) & 255
+        if di.field_number == 19:
+            return (int(self.drogue_pyro_cont_1) >> rshift) & 255
+        if di.field_number == 20:
+            return (int(self.drogue_pyro_cont_2) >> rshift) & 255
+        if di.field_number == 21:
+            return (int(self.main_pyro_cont_1) >> rshift) & 255
+        if di.field_number == 22:
+            return (int(self.main_pyro_cont_2) >> rshift) & 255
+        if di.field_number == 23:
+            return (int(self.bmp1_ok) >> rshift) & 255
+        if di.field_number == 24:
+            return (int(self.bmp2_ok) >> rshift) & 255
+        if di.field_number == 25:
+            return (int(self.ext_barometer_ok) >> rshift) & 255
+        if di.field_number == 26:
+            return (int(self.bno_ok) >> rshift) & 255
+        if di.field_number == 27:
+            return (int(self.high_g_ok) >> rshift) & 255
+        if di.field_number == 28:
+            return (int(self.exernal_imu_ok) >> rshift) & 255
+        if di.field_number == 29:
+            return (self.roll_filt >> rshift) & 255
+        if di.field_number == 30:
+            return (self.flight_stage >> rshift) & 255
+        if di.field_number == 31:
+            return (int(self.canards_enabled) >> rshift) & 255
+        if di.field_number == 32:
+            return (int(self.airbrakes_enabled) >> rshift) & 255
+        if di.field_number == 33:
+            return (self.accel_y >> rshift) & 255
+        if di.field_number == 34:
+            return (self.hg_accel_y >> rshift) & 255
+        return bp.byte(0)  # Won't reached
+
+    def bp_get_accessor(self, di: bp.DataIndexer) -> bp.Accessor:
+        return bp.NilAccessor() # Won't reached
+
+    def encode(self) -> bytearray:
+        """
+        Encode this object to bytearray.
+        """
+        s = bytearray(self.BYTES_LENGTH)
+        ctx = bp.ProcessContext(True, s)
+        self.bp_processor().process(ctx, bp.NIL_DATA_INDEXER, self)
+        return ctx.s
+
+    def decode(self, s: bytearray) -> None:
+        """
+        Decode given bytearray s to this object.
+        :param s: A bytearray with length at least `BYTES_LENGTH`.
+        """
+        assert len(s) >= self.BYTES_LENGTH, bp.NotEnoughBytes()
+        ctx = bp.ProcessContext(False, s)
+        self.bp_processor().process(ctx, bp.NIL_DATA_INDEXER, self)
+
+    def bp_process_int(self, di: bp.DataIndexer) -> None:
+        if di.field_number == 10:
+            if (self.velocity_mm_s >> 19) & 1:
+                self.velocity_mm_s |= -1048576
+            return
+        return
+
+
+@dataclass
+class LogEntry(bp.MessageBase):
+    # Number of bytes to serialize class LogEntry
+    BYTES_LENGTH: ClassVar[int] = 132
+
+    # Timestamp in milliseconds since launch
+    timestamp_ms: int = 0 # 32bit
+    # Byte maps to char in C,
+    # so with 146 bytes per second,
+    # we can transmit 128 bytes pretty safely
+    # This should be a null-terminated string
+    data: bytearray = field(default_factory=lambda: bytearray(128)) # 1024bit
 
     def __post_init__(self):
         pass
@@ -61,157 +416,22 @@ class TelemetryPacket(bp.MessageBase):
     def bp_processor(self) -> bp.Processor:
         field_processors: List[bp.Processor] = [
             bp.MessageFieldProcessor(1, bp.Uint(32)),
-            bp.MessageFieldProcessor(2, bp.Int(32)),
-            bp.MessageFieldProcessor(3, bp.Int(32)),
-            bp.MessageFieldProcessor(4, bp.Int(32)),
-            bp.MessageFieldProcessor(5, bp.Uint(32)),
-            bp.MessageFieldProcessor(6, bp.Uint(32)),
-            bp.MessageFieldProcessor(7, bp.Uint(32)),
-            bp.MessageFieldProcessor(8, bp.Uint(32)),
-            bp.MessageFieldProcessor(9, bp.Uint(32)),
-            bp.MessageFieldProcessor(10, bp.Uint(32)),
-            bp.MessageFieldProcessor(11, bp.Uint(32)),
-            bp.MessageFieldProcessor(12, bp.Uint(32)),
-            bp.MessageFieldProcessor(13, bp.Uint(32)),
-            bp.MessageFieldProcessor(14, bp.Uint(32)),
-            bp.MessageFieldProcessor(15, bp.Uint(32)),
-            bp.MessageFieldProcessor(16, bp.Uint(32)),
-            bp.MessageFieldProcessor(17, bp.Uint(32)),
-            bp.MessageFieldProcessor(18, bp.Bool()),
-            bp.MessageFieldProcessor(19, bp.Uint(32)),
-            bp.MessageFieldProcessor(20, bp.Uint(32)),
-            bp.MessageFieldProcessor(21, bp.Bool()),
-            bp.MessageFieldProcessor(22, bp.Bool()),
-            bp.MessageFieldProcessor(23, bp.Bool()),
-            bp.MessageFieldProcessor(24, bp.Bool()),
-            bp.MessageFieldProcessor(25, bp.Int(32)),
-            bp.MessageFieldProcessor(26, bp.Bool()),
-            bp.MessageFieldProcessor(27, bp.Bool()),
-            bp.MessageFieldProcessor(28, bp.Uint(32)),
-            bp.MessageFieldProcessor(29, bp.Int(32)),
+            bp.MessageFieldProcessor(2, bp.Array(False, 128, bp.Byte())),
         ]
-        return bp.MessageProcessor(False, 711, field_processors)
+        return bp.MessageProcessor(False, 1056, field_processors)
 
     def bp_set_byte(self, di: bp.DataIndexer, lshift: int, b: bp.byte) -> None:
         if di.field_number == 1:
-            self.cur_time |= (int(b) << lshift)
+            self.timestamp_ms |= (int(b) << lshift)
         if di.field_number == 2:
-            self.gps_lat |= bp.int32((int(b) << lshift))
-        if di.field_number == 3:
-            self.gps_lng |= bp.int32((int(b) << lshift))
-        if di.field_number == 4:
-            self.gps_alt |= bp.int32((int(b) << lshift))
-        if di.field_number == 5:
-            self.accel_x |= (int(b) << lshift)
-        if di.field_number == 6:
-            self.accel_y |= (int(b) << lshift)
-        if di.field_number == 7:
-            self.accel_z |= (int(b) << lshift)
-        if di.field_number == 8:
-            self.gyro_x |= (int(b) << lshift)
-        if di.field_number == 9:
-            self.gyro_y |= (int(b) << lshift)
-        if di.field_number == 10:
-            self.gyro_z |= (int(b) << lshift)
-        if di.field_number == 11:
-            self.hg_accel |= (int(b) << lshift)
-        if di.field_number == 12:
-            self.alt_baro |= (int(b) << lshift)
-        if di.field_number == 13:
-            self.vel_vertical |= (int(b) << lshift)
-        if di.field_number == 14:
-            self.smooth_vel |= (int(b) << lshift)
-        if di.field_number == 15:
-            self.press |= (int(b) << lshift)
-        if di.field_number == 16:
-            self.temp |= (int(b) << lshift)
-        if di.field_number == 17:
-            self.launchsite_msl |= (int(b) << lshift)
-        if di.field_number == 18:
-            self.airbrake_cont = bool(b)
-        if di.field_number == 19:
-            self.ab_servo_pct |= (int(b) << lshift)
-        if di.field_number == 20:
-            self.cnrd_servo_pct |= (int(b) << lshift)
-        if di.field_number == 21:
-            self.drogue_pyro_cont_1 = bool(b)
-        if di.field_number == 22:
-            self.drogue_pyro_cont_2 = bool(b)
-        if di.field_number == 23:
-            self.main_pyro_cont_1 = bool(b)
-        if di.field_number == 24:
-            self.main_pyro_cont_2 = bool(b)
-        if di.field_number == 25:
-            self.flight_index |= bp.int32((int(b) << lshift))
-        if di.field_number == 26:
-            self.ellipse_on = bool(b)
-        if di.field_number == 27:
-            self.cameras_on = bool(b)
-        if di.field_number == 28:
-            self.battery_voltage |= (int(b) << lshift)
-        if di.field_number == 29:
-            self.flight_stage |= bp.int32((int(b) << lshift))
+            self.data[di.i(0)] |= (int(b) << lshift)
         return
 
     def bp_get_byte(self, di: bp.DataIndexer, rshift: int) -> bp.byte:
         if di.field_number == 1:
-            return (self.cur_time >> rshift) & 255
+            return (self.timestamp_ms >> rshift) & 255
         if di.field_number == 2:
-            return (self.gps_lat >> rshift) & 255
-        if di.field_number == 3:
-            return (self.gps_lng >> rshift) & 255
-        if di.field_number == 4:
-            return (self.gps_alt >> rshift) & 255
-        if di.field_number == 5:
-            return (self.accel_x >> rshift) & 255
-        if di.field_number == 6:
-            return (self.accel_y >> rshift) & 255
-        if di.field_number == 7:
-            return (self.accel_z >> rshift) & 255
-        if di.field_number == 8:
-            return (self.gyro_x >> rshift) & 255
-        if di.field_number == 9:
-            return (self.gyro_y >> rshift) & 255
-        if di.field_number == 10:
-            return (self.gyro_z >> rshift) & 255
-        if di.field_number == 11:
-            return (self.hg_accel >> rshift) & 255
-        if di.field_number == 12:
-            return (self.alt_baro >> rshift) & 255
-        if di.field_number == 13:
-            return (self.vel_vertical >> rshift) & 255
-        if di.field_number == 14:
-            return (self.smooth_vel >> rshift) & 255
-        if di.field_number == 15:
-            return (self.press >> rshift) & 255
-        if di.field_number == 16:
-            return (self.temp >> rshift) & 255
-        if di.field_number == 17:
-            return (self.launchsite_msl >> rshift) & 255
-        if di.field_number == 18:
-            return (int(self.airbrake_cont) >> rshift) & 255
-        if di.field_number == 19:
-            return (self.ab_servo_pct >> rshift) & 255
-        if di.field_number == 20:
-            return (self.cnrd_servo_pct >> rshift) & 255
-        if di.field_number == 21:
-            return (int(self.drogue_pyro_cont_1) >> rshift) & 255
-        if di.field_number == 22:
-            return (int(self.drogue_pyro_cont_2) >> rshift) & 255
-        if di.field_number == 23:
-            return (int(self.main_pyro_cont_1) >> rshift) & 255
-        if di.field_number == 24:
-            return (int(self.main_pyro_cont_2) >> rshift) & 255
-        if di.field_number == 25:
-            return (self.flight_index >> rshift) & 255
-        if di.field_number == 26:
-            return (int(self.ellipse_on) >> rshift) & 255
-        if di.field_number == 27:
-            return (int(self.cameras_on) >> rshift) & 255
-        if di.field_number == 28:
-            return (self.battery_voltage >> rshift) & 255
-        if di.field_number == 29:
-            return (self.flight_stage >> rshift) & 255
+            return (self.data[di.i(0)] >> rshift) & 255
         return bp.byte(0)  # Won't reached
 
     def bp_get_accessor(self, di: bp.DataIndexer) -> bp.Accessor:

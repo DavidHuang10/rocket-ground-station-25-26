@@ -63,7 +63,7 @@ void loop() {
   message.gyro_x = floatToUint32(0.01);
   message.gyro_y = floatToUint32(-0.02);
   message.gyro_z = floatToUint32(0.00);
-  x message.temp = floatToUint32(25.4);
+  message.temp = floatToUint32(25.4);
   message.launchsite_msl = floatToUint32(30.0);
   message.airbrake_cont = true;
   message.ab_servo_pct = floatToUint32(45.0);

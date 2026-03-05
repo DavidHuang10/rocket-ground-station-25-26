@@ -8,20 +8,19 @@ import logging
 import json
 import os
 from utils import (
-    format_for_frontend, 
+    format_for_frontend,
     format_payload_for_frontend,
-    mock_telemetry_producer, 
+    mock_telemetry_producer,
     mock_payload_producer,
     unified_serial_producer,
     global_telemetry_queues,
-    send_command
+    send_command,
 )
 import serial.tools.list_ports
 from storage import StorageManager, PayloadStorageManager
 
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -45,12 +44,16 @@ async def lifespan(app: FastAPI):
 
     # Start background broadcaster tasks (one per source)
     eris_broadcaster = asyncio.create_task(
-        broadcast_telemetry("eris", eris_queue, eris_storage, format_for_frontend))
+        broadcast_telemetry("eris", eris_queue, eris_storage, format_for_frontend)
+    )
     payload_broadcaster = asyncio.create_task(
-        broadcast_telemetry("payload", payload_queue, payload_storage, format_payload_for_frontend))
-    
+        broadcast_telemetry(
+            "payload", payload_queue, payload_storage, format_payload_for_frontend
+        )
+    )
+
     producer_tasks = []
-    
+
     # Register queues for the unified parser
     global_telemetry_queues["eris"] = eris_queue
     global_telemetry_queues["payload"] = payload_queue
@@ -63,23 +66,26 @@ async def lifespan(app: FastAPI):
     for attempt in range(1, max_retries + 1):
         ports = serial.tools.list_ports.comports()
         active_ports = [
-            p.device for p in ports
+            p.device
+            for p in ports
             if p.device and "Bluetooth" not in p.device and "BTH" not in p.device
         ]
         if active_ports:
             logger.info(f"Found serial ports on attempt {attempt}: {active_ports}")
             break
-        logger.warning(f"No serial ports found (attempt {attempt}/{max_retries}), retrying in {retry_delay}s...")
+        logger.warning(
+            f"No serial ports found (attempt {attempt}/{max_retries}), retrying in {retry_delay}s..."
+        )
         await asyncio.sleep(retry_delay)
 
     if active_ports:
         logger.info(f"Starting UNIFIED mode with ports: {active_ports}")
         for port in active_ports:
-            producer_tasks.append(asyncio.create_task(
-                unified_serial_producer(port)
-            ))
+            producer_tasks.append(asyncio.create_task(unified_serial_producer(port)))
     else:
-        logger.info("No serial ports found after retries. Starting in MOCK mode for both.")
+        logger.info(
+            "No serial ports found after retries. Starting in MOCK mode for both."
+        )
         producer_tasks.append(asyncio.create_task(mock_telemetry_producer(eris_queue)))
         producer_tasks.append(asyncio.create_task(mock_payload_producer(payload_queue)))
 
@@ -104,11 +110,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutdown complete")
 
+
 app = FastAPI(
     title="ERIS Ground Station",
     description="Real-time telemetry receiver and dashboard for ERIS Delta",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
@@ -120,12 +127,14 @@ async def _handle_ws_message(message: str):
     msg = json.loads(message)
     if msg.get("type") == "command" and msg.get("page") and msg.get("command"):
         result = await send_command(msg["page"], msg["command"])
-        return json.dumps({
-            "type": "command_ack",
-            "page": msg["page"],
-            "command": msg["command"],
-            **result
-        })
+        return json.dumps(
+            {
+                "type": "command_ack",
+                "page": msg["page"],
+                "command": msg["command"],
+                **result,
+            }
+        )
     return None
 
 
@@ -173,13 +182,15 @@ async def broadcast_message(message: str):
         logger.info(f"Removed {len(disconnected)} disconnected clients")
 
 
-async def broadcast_clear_signal(page: str, takeoff_offset: float = None, takeoff_time: str = None):
+async def broadcast_clear_signal(
+    page: str, takeoff_offset: float = None, takeoff_time: str = None
+):
     """Broadcast clear signal to all connected clients for a specific page."""
     message = {
         "type": "clear",
         "page": page,
         "takeoff_offset": takeoff_offset,
-        "takeoff_time": takeoff_time
+        "takeoff_time": takeoff_time,
     }
     message_json = json.dumps(message)
     await broadcast_message(message_json)
@@ -193,10 +204,12 @@ async def broadcast_telemetry(name, queue, storage, formatter):
         try:
             telemetry = await queue.get()
             storage.add_telemetry(telemetry)
-            message = json.dumps({
-                "page": name,
-                "data": formatter(telemetry, storage.takeoff_offset_time)
-            })
+            message = json.dumps(
+                {
+                    "page": name,
+                    "data": formatter(telemetry, storage.takeoff_offset_time),
+                }
+            )
             await broadcast_message(message)
             queue.task_done()
         except Exception as e:
@@ -205,26 +218,25 @@ async def broadcast_telemetry(name, queue, storage, formatter):
 
 # ── Command Uplink ──
 
+
 class CommandRequest(BaseModel):
     command: str
+
 
 @app.post("/command/{page}")
 async def send_command_endpoint(page: str, req: CommandRequest):
     """Send a command to a transceiver and wait for ACK/NAK."""
     if page not in ("eris", "payload"):
         return {"status": "error", "message": f"Unknown page: {page}"}
-    
+
     result = await send_command(page, req.command)
-    
+
     # Broadcast result to all WebSocket clients
-    ack_msg = json.dumps({
-        "type": "command_ack",
-        "page": page,
-        "command": req.command,
-        **result
-    })
+    ack_msg = json.dumps(
+        {"type": "command_ack", "page": page, "command": req.command, **result}
+    )
     await broadcast_message(ack_msg)
-    
+
     return result
 
 
@@ -235,7 +247,7 @@ async def health_check():
         "status": "healthy",
         "connected_clients": len(connected_clients),
         "eris_queue_size": eris_queue.qsize(),
-        "payload_queue_size": payload_queue.qsize()
+        "payload_queue_size": payload_queue.qsize(),
     }
 
 
@@ -245,10 +257,7 @@ async def get_current_telemetry(page: str):
     storage = storage_managers.get(page)
     if not storage:
         return {"error": f"Unknown page: {page}"}
-    return {
-        "data": storage.get_current_data(),
-        "session": storage.get_session_info()
-    }
+    return {"data": storage.get_current_data(), "session": storage.get_session_info()}
 
 
 @app.post("/telemetry/clear/{page}")
@@ -263,7 +272,7 @@ async def clear_telemetry(page: str):
         await broadcast_clear_signal(
             page=page,
             takeoff_offset=result.get("takeoff_offset"),
-            takeoff_time=result.get("takeoff_time")
+            takeoff_time=result.get("takeoff_time"),
         )
     return result
 
@@ -282,4 +291,5 @@ app.mount("/", StaticFiles(directory="public", html=True), name="public")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
