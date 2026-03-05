@@ -44,7 +44,19 @@ PYTHON_PATH=$(which python3)
 setcap 'cap_net_bind_service=+ep' "$PYTHON_PATH"
 
 echo ""
-echo "[4/4] Setting up auto-start service..."
+echo "[4/5] Configuring static ethernet IP (192.168.1.1)..."
+# Remove existing config if present
+nmcli connection delete "eth-static" 2>/dev/null || true
+nmcli connection add \
+    type ethernet \
+    con-name "eth-static" \
+    ifname eth0 \
+    ipv4.method manual \
+    ipv4.addresses "192.168.1.1/24" \
+    connection.autoconnect yes
+
+echo ""
+echo "[5/5] Setting up auto-start service..."
 cp "$SCRIPT_DIR/ground-station.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable ground-station

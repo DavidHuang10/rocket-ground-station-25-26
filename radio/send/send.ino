@@ -23,7 +23,7 @@
 // ── Pin Definitions ──
 #define RFM95_CS 10
 #define RFM95_RST 9
-#define RFM95_INT 24 // 5, 24
+#define RFM95_INT 5 // 5, 24
 #define LED 13
 
 // ── Radio Configuration ──

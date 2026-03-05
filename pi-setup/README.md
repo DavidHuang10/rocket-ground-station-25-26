@@ -10,7 +10,8 @@ Sets up a Pi to host a telemetry dashboard accessible via WiFi hotspot.
 | Username | `raspy` |
 | Hotspot SSID | `ground_station` |
 | Hotspot Password | `31415926` |
-| Dashboard URL | `http://192.168.4.1` |
+| Hotspot Dashboard URL | `http://192.168.4.1` |
+| Ethernet Dashboard URL | `http://192.168.1.1` |
 
 ## Initial Setup
 
