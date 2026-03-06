@@ -130,6 +130,9 @@ message FlightStatus {
     // High-G accelerometer Y-axis (m/s² × 10)
     // Range: ±3276.8 m/s² covers ADXL375 ±200g range
     int16 hg_accel_y = 34;
+
+    // SD card logging enabled
+    bool logging_enabled = 35;
 }
 
 message LogEntry {

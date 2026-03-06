@@ -164,6 +164,8 @@ class FlightStatus(bp.MessageBase):
     # High-G accelerometer Y-axis (m/s² × 10)
     # Range: ±3276.8 m/s² covers ADXL375 ±200g range
     hg_accel_y: int = 0 # 16bit
+    # SD card logging enabled
+    logging_enabled: bool = False # 1bit
 
     def __post_init__(self):
         # initialize handling of enum field 'flight_stage' as `enum.IntEnum`
@@ -219,8 +221,9 @@ class FlightStatus(bp.MessageBase):
             bp.MessageFieldProcessor(32, bp.Bool()),
             bp.MessageFieldProcessor(33, bp.Int(16)),
             bp.MessageFieldProcessor(34, bp.Int(16)),
+            bp.MessageFieldProcessor(35, bp.Bool()),
         ]
-        return bp.MessageProcessor(False, 313, field_processors)
+        return bp.MessageProcessor(False, 314, field_processors)
 
     def bp_set_byte(self, di: bp.DataIndexer, lshift: int, b: bp.byte) -> None:
         if di.field_number == 1:
@@ -291,6 +294,8 @@ class FlightStatus(bp.MessageBase):
             self.accel_y |= bp.int16((int(b) << lshift))
         if di.field_number == 34:
             self.hg_accel_y |= bp.int16((int(b) << lshift))
+        if di.field_number == 35:
+            self.logging_enabled = bool(b)
         return
 
     def bp_get_byte(self, di: bp.DataIndexer, rshift: int) -> bp.byte:
@@ -362,6 +367,8 @@ class FlightStatus(bp.MessageBase):
             return (self.accel_y >> rshift) & 255
         if di.field_number == 34:
             return (self.hg_accel_y >> rshift) & 255
+        if di.field_number == 35:
+            return (int(self.logging_enabled) >> rshift) & 255
         return bp.byte(0)  # Won't reached
 
     def bp_get_accessor(self, di: bp.DataIndexer) -> bp.Accessor:

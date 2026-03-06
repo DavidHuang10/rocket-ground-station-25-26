@@ -201,7 +201,8 @@
           "order": 19,
           "items": [
             { "label": "Canards", "field": "canards_enabled" },
-            { "label": "Airbrakes", "field": "airbrakes_enabled" }
+            { "label": "Airbrakes", "field": "airbrakes_enabled" },
+            { "label": "Logging", "field": "logging_enabled" }
           ]
         },
         {
@@ -562,6 +563,12 @@
       "unit": "m/s²",
       "precision": 1,
       "description": "ADXL375 high-G accelerometer Y-axis"
+    },
+    "logging_enabled": {
+      "name": "Logging",
+      "unit": "",
+      "precision": 0,
+      "description": "SD card logging enabled"
     }
   }
 }
