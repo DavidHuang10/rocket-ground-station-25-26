@@ -78,6 +78,9 @@ class FlightComputerTelemetryData(BaseModel):
     # High-G accelerometer Y-axis (m/s²)
     hg_accel_y: float = Field(..., description="High-G accel Y (m/s²)")
 
+    # SD card logging enabled
+    logging_enabled: bool = Field(..., description="SD card logging enabled")
+
     @field_validator("gps_lat", "gps_lng")
     @classmethod
     def validate_gps_coords(cls, v: int) -> int:
@@ -137,6 +140,7 @@ class FlightComputerTelemetryData(BaseModel):
             airbrakes_enabled=packet.airbrakes_enabled,
             accel_y=packet.accel_y / 100.0,
             hg_accel_y=packet.hg_accel_y / 10.0,
+            logging_enabled=packet.logging_enabled,
         )
 
     def get_gps_lat_degrees(self) -> float:

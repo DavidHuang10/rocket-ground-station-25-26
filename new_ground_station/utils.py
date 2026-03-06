@@ -100,6 +100,7 @@ ERIS_FIELDS = [
     ("airbrakes_enabled", "airbrakes_enabled"),
     ("accel_y", "accel_y"),
     ("hg_accel_y", "hg_accel_y"),
+    ("logging_enabled", "logging_enabled"),
 ]
 
 PAYLOAD_FIELDS = [
@@ -390,6 +391,7 @@ async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
             airbrakes_enabled=True,
             accel_y=acceleration * math.cos(t * 0.3),
             hg_accel_y=acceleration * math.cos(t * 0.3) * 2.0,
+            logging_enabled=True,
         )
 
         await telemetry_queue.put(telemetry)

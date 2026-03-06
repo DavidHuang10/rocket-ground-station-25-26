@@ -89,6 +89,8 @@ async def lifespan(app: FastAPI):
         producer_tasks.append(asyncio.create_task(mock_telemetry_producer(eris_queue)))
         producer_tasks.append(asyncio.create_task(mock_payload_producer(payload_queue)))
 
+    # If argument with serial port is provided, set active_ports = [arg_port]
+
     logger.info("Background tasks started")
 
     yield
