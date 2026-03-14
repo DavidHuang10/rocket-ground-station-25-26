@@ -84,14 +84,14 @@ class FlightStatus(bp.MessageBase):
     Main telemetry data packet
     """
     # Number of bytes to serialize class FlightStatus
-    BYTES_LENGTH: ClassVar[int] = 40
+    BYTES_LENGTH: ClassVar[int] = 38
 
     # Timestamp in milliseconds since launch
     # Max value:
     timestamp_ms: int = 0 # 32bit
     # Canard angles
-    # Range: 2^8 values, as a percentage (0-100%)
-    canard_angle_pct: Percent = field(default_factory=bp_default_factory_Percent) # 8bit
+    # Range: 2^8 values, in increments of 10th of a degree.
+    canard_angle_ddeg: int = 0 # 8bit
     # Airbrake deployment
     # Range: 2^8 values, as a percentage (0-100%)
     airbrake_deploy_pct: Percent = field(default_factory=bp_default_factory_Percent) # 8bit
@@ -136,9 +136,10 @@ class FlightStatus(bp.MessageBase):
     # See typedef Temperature line
     # Range: 0C to 127.5C
     temperature_celsius: Temperature = field(default_factory=bp_default_factory_Temperature) # 8bit
-    # Vertical velocity (fused) in cm/s
-    # Signed value
-    vertical_velocity_cms: int = 0 # 32bit
+    # Fused barometer altitude AGL in meters
+    # Range: -500 to 32267 m AGL
+    # NOTE: This number is offset by +500
+    fused_baro_altitude_agl_m: int = 0 # 16bit
     # Continuity (bool)
     drogue_pyro_cont_1: bool = False # 1bit
     drogue_pyro_cont_2: bool = False # 1bit
@@ -188,7 +189,7 @@ class FlightStatus(bp.MessageBase):
     def bp_processor(self) -> bp.Processor:
         field_processors: List[bp.Processor] = [
             bp.MessageFieldProcessor(1, bp.Uint(32)),
-            bp.MessageFieldProcessor(2, bp_processor_Percent()),
+            bp.MessageFieldProcessor(2, bp.Int(8)),
             bp.MessageFieldProcessor(3, bp_processor_Percent()),
             bp.MessageFieldProcessor(4, bp.Uint(16)),
             bp.MessageFieldProcessor(5, bp.Bool()),
@@ -204,7 +205,7 @@ class FlightStatus(bp.MessageBase):
             bp.MessageFieldProcessor(15, bp.Uint(6)),
             bp.MessageFieldProcessor(16, bp.Uint(3)),
             bp.MessageFieldProcessor(17, bp_processor_Temperature()),
-            bp.MessageFieldProcessor(18, bp.Int(32)),
+            bp.MessageFieldProcessor(18, bp.Int(16)),
             bp.MessageFieldProcessor(19, bp.Bool()),
             bp.MessageFieldProcessor(20, bp.Bool()),
             bp.MessageFieldProcessor(21, bp.Bool()),
@@ -223,13 +224,13 @@ class FlightStatus(bp.MessageBase):
             bp.MessageFieldProcessor(34, bp.Int(16)),
             bp.MessageFieldProcessor(35, bp.Bool()),
         ]
-        return bp.MessageProcessor(False, 314, field_processors)
+        return bp.MessageProcessor(False, 298, field_processors)
 
     def bp_set_byte(self, di: bp.DataIndexer, lshift: int, b: bp.byte) -> None:
         if di.field_number == 1:
             self.timestamp_ms |= (int(b) << lshift)
         if di.field_number == 2:
-            self.canard_angle_pct |= (int(b) << lshift)
+            self.canard_angle_ddeg |= bp.int8((int(b) << lshift))
         if di.field_number == 3:
             self.airbrake_deploy_pct |= (int(b) << lshift)
         if di.field_number == 4:
@@ -261,7 +262,7 @@ class FlightStatus(bp.MessageBase):
         if di.field_number == 17:
             self.temperature_celsius |= (int(b) << lshift)
         if di.field_number == 18:
-            self.vertical_velocity_cms |= bp.int32((int(b) << lshift))
+            self.fused_baro_altitude_agl_m |= bp.int16((int(b) << lshift))
         if di.field_number == 19:
             self.drogue_pyro_cont_1 = bool(b)
         if di.field_number == 20:
@@ -302,7 +303,7 @@ class FlightStatus(bp.MessageBase):
         if di.field_number == 1:
             return (self.timestamp_ms >> rshift) & 255
         if di.field_number == 2:
-            return (self.canard_angle_pct >> rshift) & 255
+            return (self.canard_angle_ddeg >> rshift) & 255
         if di.field_number == 3:
             return (self.airbrake_deploy_pct >> rshift) & 255
         if di.field_number == 4:
@@ -334,7 +335,7 @@ class FlightStatus(bp.MessageBase):
         if di.field_number == 17:
             return (self.temperature_celsius >> rshift) & 255
         if di.field_number == 18:
-            return (self.vertical_velocity_cms >> rshift) & 255
+            return (self.fused_baro_altitude_agl_m >> rshift) & 255
         if di.field_number == 19:
             return (int(self.drogue_pyro_cont_1) >> rshift) & 255
         if di.field_number == 20:

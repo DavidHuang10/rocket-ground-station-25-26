@@ -70,7 +70,7 @@ ERIS_FIELDS = [
     ("altitude", "altitude"),
     ("velocity", "velocity"),
     ("acceleration", "acceleration"),
-    ("vertical_velocity", "vertical_velocity"),
+    ("fused_baro_agl", "fused_baro_agl"),
     ("battery_voltage", "battery_voltage"),
     ("temp", "temperature"),
     ("lat", "get_gps_lat_degrees"),
@@ -350,7 +350,7 @@ async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
         acceleration = 15.2 + math.sin(t * 2) * 5
         roll = 0.05 + math.sin(t) * 0.1
         ab_pct = int(45 + math.sin(t * 0.5) * 30)
-        cnrd_pct = int(12 + math.cos(t * 0.7) * 10)
+        cnrd_angle = round(math.cos(t * 0.7) * 10.0, 1)  # degrees, ±10°
         battery = 12.6 - t * 0.01
         temp = 22.5 + t * 0.1
 
@@ -364,9 +364,9 @@ async def mock_telemetry_producer(telemetry_queue: asyncio.Queue):
             altitude=altitude,
             velocity=velocity,
             acceleration=acceleration,
-            vertical_velocity=vertical_velocity,
+            fused_baro_agl=altitude - 100.0,
             airbrake_deploy_pct=max(0, min(100, ab_pct)),
-            canard_angle_pct=max(0, min(100, cnrd_pct)),
+            canard_angle_pct=cnrd_angle,
             battery_voltage=battery,
             temperature=temp,
             runcam_active=True,

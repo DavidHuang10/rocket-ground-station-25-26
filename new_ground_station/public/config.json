@@ -40,11 +40,11 @@
           "chart_color": "#2196f3"
         },
         {
-          "id": "vertical_velocity",
+          "id": "fused_baro_agl",
           "type": "chart",
-          "title": "Vertical Velocity (Fused)",
-          "fields": ["vertical_velocity"],
-          "unit": "m/s",
+          "title": "Fused Baro Altitude AGL",
+          "fields": ["fused_baro_agl"],
+          "unit": "m",
           "precision": 1,
           "order": 4,
           "chart_color": "#03a9f4"
@@ -139,9 +139,9 @@
         {
           "id": "cnrd_servo",
           "type": "chart",
-          "title": "Canard Servo",
+          "title": "Canard Servo Angle",
           "fields": ["cnrd_servo"],
-          "unit": "%",
+          "unit": "°",
           "precision": 1,
           "order": 14,
           "chart_color": "#8bc34a"
@@ -354,11 +354,11 @@
       "precision": 1,
       "description": "Velocity from Kalman filter"
     },
-    "vertical_velocity": {
-      "name": "Vertical Velocity",
-      "unit": "m/s",
+    "fused_baro_agl": {
+      "name": "Fused Baro Altitude AGL",
+      "unit": "m",
       "precision": 1,
-      "description": "Fused vertical velocity"
+      "description": "Fused barometer altitude above ground level"
     },
     "acceleration": {
       "name": "Acceleration",
@@ -415,10 +415,10 @@
       "description": "Airbrake servo position"
     },
     "cnrd_servo": {
-      "name": "Canard Servo",
-      "unit": "%",
+      "name": "Canard Servo Angle",
+      "unit": "°",
       "precision": 1,
-      "description": "Canard servo position"
+      "description": "Canard servo angle in degrees"
     },
     "roll": {
       "name": "Roll Rate",

@@ -37,8 +37,8 @@ message FlightStatus {
     uint32 timestamp_ms = 1;
 
     // Canard angles
-    // Range: 2^8 values, as a percentage (0-100%)
-    Percent canard_angle_pct = 2;
+    // Range: 2^8 values, in increments of 10th of a degree.
+    int8 canard_angle_ddeg = 2;
 
     // Airbrake deployment
     // Range: 2^8 values, as a percentage (0-100%)
@@ -96,9 +96,10 @@ message FlightStatus {
     // Range: 0C to 127.5C
     Temperature temperature_celsius = 17;
 
-    // Vertical velocity (fused) in cm/s
-    // Signed value
-    int32 vertical_velocity_cms = 18;
+    // Fused barometer altitude AGL in meters
+    // Range: -500 to 32267 m AGL
+    // NOTE: This number is offset by +500
+    int16 fused_baro_altitude_agl_m = 18;
 
     // Continuity (bool)
    	bool drogue_pyro_cont_1 = 19;

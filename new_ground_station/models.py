@@ -33,11 +33,11 @@ class FlightComputerTelemetryData(BaseModel):
     altitude: float = Field(..., description="Altitude MSL (meters)")
     velocity: float = Field(..., description="Velocity (m/s, from kalman)")
     acceleration: float = Field(..., description="Acceleration (m/s², from kalman)")
-    vertical_velocity: float = Field(..., description="Fused vertical velocity (m/s)")
+    fused_baro_agl: float = Field(..., description="Fused barometer altitude AGL (m)")
 
     # Control surfaces (0-100%)
     airbrake_deploy_pct: int = Field(..., description="Airbrake deployment percentage")
-    canard_angle_pct: int = Field(..., description="Canard angle percentage")
+    canard_angle_pct: float = Field(..., description="Canard servo angle (degrees)")
 
     # Power
     battery_voltage: float = Field(..., description="Battery voltage (V)")
@@ -106,7 +106,7 @@ class FlightComputerTelemetryData(BaseModel):
           - altitude_msl_m / gps_altitude_msl_m: uint16 offset by +500 → subtract 500
           - velocity_mm_s: int20 in mm/s → divide by 1000 for m/s (TODO: check this, or rename)
           - acceleration_mss: int16 in cm/s² → divide by 100 for m/s²
-          - vertical_velocity_cms: int32 in cm/s → divide by 100 for m/s
+          - fused_baro_altitude_agl_m: int16 offset by +500 → subtract 500
           - temperature_celsius: uint8, stored as round(°C × 2) → divide by 2 (TODO: check this)
           - battery_voltage_mv: uint16 in mV → divide by 1000 for V
           - roll_filt: int16, rad/s × 100 → divide by 100
@@ -122,9 +122,9 @@ class FlightComputerTelemetryData(BaseModel):
             altitude=float(packet.altitude_msl_m - 500),
             velocity=packet.velocity_mm_s / 100.0,
             acceleration=packet.acceleration_mss / 100.0,
-            vertical_velocity=packet.vertical_velocity_cms / 100.0,
+            fused_baro_agl=float(packet.fused_baro_altitude_agl_m - 500),
             airbrake_deploy_pct=packet.airbrake_deploy_pct,
-            canard_angle_pct=packet.canard_angle_pct,
+            canard_angle_pct=packet.canard_angle_ddeg / 10.0,
             battery_voltage=packet.battery_voltage_mv / 1000.0,
             temperature=packet.temperature_celsius / 4.0,
             runcam_active=packet.runcam_active,
